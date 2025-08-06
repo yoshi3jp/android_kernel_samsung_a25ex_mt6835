@@ -255,6 +255,12 @@ enum {
 	 * during the hdev->setup vendor callback.
 	 */
 	HCI_QUIRK_BROKEN_READ_TRANSMIT_POWER,
+
+	/* When this quirk is set, the Read Synchronization Train Parameters
+	 * command is not sent. Some broken controllers advertise support
+	 * for this feature but reject the command.
+	 */
+	HCI_QUIRK_BROKEN_SYNC_TRAIN_PARAMS,	
 };
 
 /* HCI device flags */

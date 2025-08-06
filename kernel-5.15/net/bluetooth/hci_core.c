@@ -852,7 +852,8 @@ static int hci_init4_req(struct hci_request *req, unsigned long opt)
 		hci_req_add(req, HCI_OP_GET_MWS_TRANSPORT_CONFIG, 0, NULL);
 
 	/* Check for Synchronization Train support */
-	if (lmp_sync_train_capable(hdev))
+	if (lmp_sync_train_capable(hdev) &&
+	    !test_bit(HCI_QUIRK_BROKEN_SYNC_TRAIN_PARAMS, &hdev->quirks))
 		hci_req_add(req, HCI_OP_READ_SYNC_TRAIN_PARAMS, 0, NULL);
 
 	/* Enable Secure Connections if supported and configured */

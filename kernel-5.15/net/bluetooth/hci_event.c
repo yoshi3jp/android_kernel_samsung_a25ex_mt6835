@@ -604,6 +604,15 @@ static void hci_cc_read_local_version(struct hci_dev *hdev, struct sk_buff *skb)
 		hdev->lmp_ver = rp->lmp_ver;
 		hdev->manufacturer = __le16_to_cpu(rp->manufacturer);
 		hdev->lmp_subver = __le16_to_cpu(rp->lmp_subver);
+
+	/* MediaTek controllers claim to support Synchronization Train but
+	 * don't implement the HCI command to read its parameters. This
+	 * causes the `hciconfig up` sequence to fail.
+	 */
+	if (hdev->manufacturer == 70) {
+		bt_dev_info(hdev, "Applying MediaTek quirk for buggy Sync Train support");
+		set_bit(HCI_QUIRK_BROKEN_SYNC_TRAIN_PARAMS, &hdev->quirks);
+	}		
 	}
 }
 
