@@ -139,8 +139,15 @@ build_vendor_boot(){
         "${SCRIPT_DIR}/prebuilts_a166p/scripts/build_vendor_boot.sh"
 }
 
+# build vendor dlkm
+build_vendor_dlkm(){
+    SCRIPT_DIR="${SCRIPT_DIR}" \
+        "${SCRIPT_DIR}/prebuilts_a166p/scripts/build_vendor_dlkm.sh"
+}
+
 install_requirements
 export_common_build_env
 export_custom_build_env
 build_gki_kernel || exit 1
 build_vendor_boot || exit 1
+build_vendor_dlkm || exit 1
