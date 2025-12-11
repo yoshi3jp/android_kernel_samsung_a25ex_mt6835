@@ -1,5 +1,6 @@
 #!/bin/bash
 SCRIPT_DIR="$(dirname $(readlink -fq $0))"
+mkdir -p "${SCRIPT_DIR}/dist"
 
 # update git submodules if exists
 git submodule update --init --recursive || true
@@ -97,7 +98,10 @@ export_custom_build_env(){
 # main kernel build function
 build_gki_kernel(){
     cd "${SCRIPT_DIR}/kernel"
-    env "${GKI_KERNEL_BUILD_OPTIONS[@]}" ./build/build.sh
+
+    env "${GKI_KERNEL_BUILD_OPTIONS[@]}" ./build/build.sh && \
+        cp "${SCRIPT_DIR}/out/target/product/a16xm/obj/KERNEL_OBJ/kernel-5.15/arch/arm64/boot/Image"* "${SCRIPT_DIR}/dist"
+
     local exit_code=$?
     cd "${SCRIPT_DIR}"
     return $exit_code
