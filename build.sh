@@ -1,9 +1,19 @@
 #!/bin/bash
 SCRIPT_DIR="$(dirname $(readlink -fq $0))"
-mkdir -p "${SCRIPT_DIR}/dist"
 
 # update git submodules if exists
 git submodule update --init --recursive || true
+
+# clean up everything
+clean_up() {
+    rm -rf "${SCRIPT_DIR}/dist"
+    rm -rf "${SCRIPT_DIR}/out"
+
+    cd "${SCRIPT_DIR}/prebuilts_a166p" && \
+        git clean -xdf
+}
+
+mkdir -p "${SCRIPT_DIR}/dist"
 
 # check and install requirements and install Samsung's ndk
 install_requirements() {
@@ -145,6 +155,7 @@ build_vendor_dlkm(){
         "${SCRIPT_DIR}/prebuilts_a166p/scripts/build_vendor_dlkm.sh"
 }
 
+clean_up
 install_requirements
 export_common_build_env
 export_custom_build_env
