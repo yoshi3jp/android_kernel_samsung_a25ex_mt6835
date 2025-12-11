@@ -7,3 +7,4 @@ out/
 *.reg
 *.zip
 *.tar
+custom_defconfigs/version_defconfig
