@@ -1,0 +1,1 @@
+# Symlink info extracted from /home/ravindu644/Desktop/Github/android_kernel_a166p/prebuilts_a166p/AIT/INPUT_IMAGES/vendor_dlkm.img on Thu Dec 11 09:17:26 PM +0530 2025
