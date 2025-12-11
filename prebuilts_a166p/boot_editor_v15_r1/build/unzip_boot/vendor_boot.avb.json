@@ -1,0 +1,63 @@
+{
+  "header" : {
+    "required_libavb_version_major" : 1,
+    "required_libavb_version_minor" : 0,
+    "authentication_data_block_size" : 576,
+    "auxiliary_data_block_size" : 1280,
+    "algorithm_type" : 2,
+    "hash_offset" : 0,
+    "hash_size" : 32,
+    "signature_offset" : 32,
+    "signature_size" : 512,
+    "public_key_offset" : 208,
+    "public_key_size" : 1032,
+    "public_key_metadata_offset" : 1240,
+    "public_key_metadata_size" : 0,
+    "descriptors_offset" : 0,
+    "descriptors_size" : 208,
+    "rollback_index" : 0,
+    "flags" : 0,
+    "release_string" : "avbtool 1.2.0"
+  },
+  "authBlob" : {
+    "offset" : 9482496,
+    "size" : 576,
+    "hash" : "bd9175ca32c7322685be51458fb26d4e6b82bf81e4c5e3d081d78c438166b6a6",
+    "signature" : "3e9fa67ca63c9c63fc2c3b25ffdffb7b3f6a676eb1702d03fc757e687ccd2cda8b0d20c96861630cd7656f768a299098e51d1efef811799f84ac7ac0e1be85975655a7c9c7acb176bf1514390d2477bc943cd06a74488e39baf4965590c66851ca2fa087c00a2072904cf9aef313a8875714c13cda7310c70a6074c0d8d3d74c245e1127f3446ca7ba9858b2e8d09777cddda8c8b4e387a232383df0d64ff1612161c3906089c6890e12786f2288a772cfe08d21e9ecac6c7e19fed2aa1bdc71b56caba1aabce3bcf6b21b206464de43370cf19e82eabe6ac3798e2d2f1433ee84088e88ca420df09183cc863fd705a77ab85f082817680f96df96d3ca393fc1d02e6f1212d59b5ac79f2bf7dc34577d967c2777a199d30297a3b224cf975fa090cf51373ca5f98d84477eb513b20cda8c6d49d99f223bc488f27f254a884cce06c2a4b47e52e69c43317a3fe9573d497ae8c0ecf07ab04bafb7de0bd937c8fd94eb15ae4548559580713e8796104908276d54ce0356ece30ba0bcf94c5abce92fc1dafaf9a2bd9627ed70388fff5cf24ba2a160d181e7462735e2a2106c4e51826024509afcdf55bc731be8afe57b1ca8e9e36dd9d443c8bd589e0a62cc50962503f3bc9b99d542af362ac68968c99ff8c3befd511a9c037ac5cb904cf64743db6dde78589e2340cbb100fe315056c5d64c366ac81cf1f5df482b8ea6c455a9"
+  },
+  "auxBlob" : {
+    "pubkey" : {
+      "offset" : 208,
+      "size" : 1032,
+      "pubkey" : "AAAQAFXZBK3YBK/j04Rsfg2JPcKM0xJV6WLJ8Q9ezBZyq0R8LGVKlLUWKwC7Bu8TB1NM+WS5KHobhJiI2GekI/mnS9xKD/c6GK5UqBX+sK2sNdo7rSe8r+jTLzc01lErbFon15YGr2u4gMr6MLSxhbNNqqrDFjQauOfH+vkJd6uXk+tErs8gvPCAEdsjDEdxuW3We2BHhxZWk7fCKpqwTAEMMNiTh/Dtbou+MFv2pq/dgHxFXo+Rk15E/riCB+55yr8xc2JY483EvMIRHaFKv/4nfaH2NaNeytxXLz7wyV2GavivZqftzbjtoV+6m4Ua1QmulE47z8tcyXmA98ymSqhq2NMxEfn2AmMqGi3RGmYbFkG9vfdNwErlJ0lff1jjJy3lyWYOUjgWOPsW61M/5v3pol4lWdh5Rf8DTCaiAFqOwlGhFfl79FyBmxhHNdgtBemtDzV0FaOOi8wn2nxd5PoE0wULujqySUUvR8cNQT+XgE0/wbW7cF+nN69IIhJFLvUPh5LihAH5Eg8UFSTOiZnuucQXcHAV6r7GbB9is/QtFof7Vh5Fq64y5F6R7VNmXr3treYSOQ2DyehrbC2l7sRaZq6Ml9cNbEnH9cSSMYsJ7jPaqTe2SRj4DmBFyDOR7yBXEL54LYMm1sph+S/gvwUwUloSHACnXcx8LsWVi6M78EMuXt0A2w2zN5mpzZy3Q/c1RCHCgnGrjaq0QRHsHo38FIKSToNqCms1Xl3pXMyM3jnRSltfY6lk4ArLC7hafMML5r7+iw99NI4CZnQBbMp2rHxnCC8/GqYsYLP/2o24EgwAf8xQoVxkoeJfMmXJnL7WChOHPCpFRwzKQoL6iWXnibSP9x7mI6XQWTd5ktfOPf3joQvPbIWgZfNcxkpjX246OiqLarYvu/iyS2K8GpElZuNpymBJC/aKvj52U8J6qAQXdfHzA2IbhbKw74AVttRO33Gs2yoE1LQhumVWV+j6hKJ9Ew6v15pYKqOBhI0JoGrBu9n1hqy9dWEJ5ow9d7LtMCDkAB2X6L/HABshsRbnQWcu7Di85Ru0BiMxcRxJzXZKdjaNo4mLSnr0h8gVDzc59m2AGe9cqGbOGxZ5Id/XMTDEId00W9IaKz5d9+rKBY63y0kuoOP0p0gZEJwEp/QodMhvYyArRiQmGR3RLDFtWimiBqayQcwKJ5YJlqxHZXhoUZjW2KYtoM/s4nTyguOX2X7U+AtwQz2xe5eA1svXGbxjC/1NiP5nrLjMULdos1vWHiX8XzyNsTN8s0kBP3FVDlG6YSb66uW16KrPzZaf1sFfU5GtBd4g51HaW5Vn7fTuQmVwEwtwFBzJ4BnKX/UdcEtsBnTstS534XSho5mghZ7xrNh+"
+    },
+    "pubkeyMeta" : null,
+    "propertyDescriptors" : [ ],
+    "hashTreeDescriptors" : [ ],
+    "hashDescriptors" : [ {
+      "tag" : 2,
+      "num_bytes_following" : 192,
+      "sequence" : 1,
+      "flags" : 0,
+      "partition_name" : "vendor_boot",
+      "hash_algorithm" : "sha256",
+      "image_size" : 9482240,
+      "salt" : "bJwyJIa6JGruICdxXo4YzuuYclBnSyQvMzZpEj51QGg=",
+      "digest" : "eH4r+Kh4Pz+zQd4i/DcTQ899IdbpF7LMaZsSHXb0DzQ=",
+      "partition_name_len" : 11,
+      "salt_len" : 32,
+      "digest_len" : 32,
+      "flagsInterpretation" : "0:A/B system"
+    } ],
+    "kernelCmdlineDescriptors" : [ ],
+    "chainPartitionDescriptors" : [ ],
+    "unknownDescriptors" : [ ]
+  },
+  "footer" : {
+    "versionMajor" : 1,
+    "versionMinor" : 0,
+    "originalImageSize" : 9482240,
+    "vbMetaOffset" : 9482240,
+    "vbMetaSize" : 2112
+  }
+}
