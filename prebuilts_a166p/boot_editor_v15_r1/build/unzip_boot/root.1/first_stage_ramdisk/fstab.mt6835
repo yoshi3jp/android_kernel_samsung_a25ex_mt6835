@@ -1,11 +1,6 @@
-# 1 "vendor/mediatek/proprietary/hardware/fstab/mt6835/fstab.in.mt6835"
-# 1 "<built-in>" 1
-# 1 "<built-in>" 3
-# 356 "<built-in>" 3
-# 1 "<command line>" 1
-# 1 "<built-in>" 2
-# 1 "vendor/mediatek/proprietary/hardware/fstab/mt6835/fstab.in.mt6835" 2
-# 132 "vendor/mediatek/proprietary/hardware/fstab/mt6835/fstab.in.mt6835"
+# Copyright ravindu644 ~ 2025
+# AVB disabled by default
+# Also supports loading erofs, ext4 and f2fs logical images
 
 system	/system	erofs	ro	wait,,logical,first_stage_mount
 system	/system	ext4	ro	wait,,logical,first_stage_mount
