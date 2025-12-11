@@ -41,6 +41,13 @@ install_requirements() {
     fi
 }
 
+# Localversion
+if [ -z "$BUILD_KERNEL_VERSION" ]; then
+    export BUILD_KERNEL_VERSION="dev"
+fi
+
+echo -e "CONFIG_LOCALVERSION_AUTO=n\nCONFIG_LOCALVERSION=\"-ravindu644-${BUILD_KERNEL_VERSION}\"\n" > "${SCRIPT_DIR}/custom_defconfigs/version_defconfig"
+
 export_common_build_env() {
 
     cd "${SCRIPT_DIR}/kernel-5.15"
