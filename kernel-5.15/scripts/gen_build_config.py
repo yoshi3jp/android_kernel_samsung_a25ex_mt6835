@@ -163,7 +163,7 @@ def main(**args):
     ext_modules_list = 'EXT_MODULES=\"%s %s\"' % (ext_modules_list.strip(), ext_modules.strip())
     file_text.append(ext_modules_list)
 
-    file_text.append("DIST_CMDS='cp -p ${OUT_DIR}/.config ${DIST_DIR}'")
+    file_text.append("DIST_CMDS='cp -p ${OUT_DIR}/.config ${OUT_DIR}/arch/arm64/boot/Image.gz ${DIST_DIR}'")
 
     gen_build_config_mtk = '%s.mtk' % (gen_build_config)
     file_handle = open(gen_build_config_mtk, 'w')
