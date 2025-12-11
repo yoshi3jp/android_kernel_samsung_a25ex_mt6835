@@ -42,7 +42,7 @@ install_requirements() {
 
 export_common_build_env() {
 
-    cd ${SCRIPT_DIR}/kernel-5.15
+    cd "${SCRIPT_DIR}/kernel-5.15"
 
     # cook build config
     python scripts/gen_build_config.py \
@@ -59,9 +59,28 @@ export_common_build_env() {
     export DIST_DIR="../out/target/product/a16xm/obj/KERNEL_OBJ"
     export BUILD_CONFIG="../out/target/product/a16xm/obj/KERNEL_OBJ/build.config"
 
-    cd ${SCRIPT_DIR}
+    cd "${SCRIPT_DIR}"
 
+}
+
+export_custom_build_env(){
+
+    # add custom build options to here
+    # check out the kernel/build/build.sh to possible variables
+    export GKI_KERNEL_BUILD_OPTIONS=(
+        "SKIP_MRPROPER=1"
+    )
+
+}
+
+# main kernel build function
+build_gki_kernel(){
+    cd "${SCRIPT_DIR}/kernel"
+    env "${GKI_KERNEL_BUILD_OPTIONS[@]}" ./build/build.sh
+    cd "${SCRIPT_DIR}"
 }
 
 install_requirements
 export_common_build_env
+export_custom_build_env
+build_gki_kernel || exit 1
