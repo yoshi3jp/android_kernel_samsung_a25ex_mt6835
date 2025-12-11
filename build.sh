@@ -155,6 +155,27 @@ build_vendor_dlkm(){
         "${SCRIPT_DIR}/prebuilts_a166p/scripts/build_vendor_dlkm.sh"
 }
 
+# package stuffs
+package_stuff(){
+    cd "${SCRIPT_DIR}/dist"
+
+    tar -cvf "SM-A166P-Ubuntu-LXC-Docker-KernelSU-${BUILD_KERNEL_VERSION}.tar" boot.img vendor_boot.img || {
+        echo "Error: Failed to create tar file"
+        return 1
+    }
+
+    zip -9 -r "SM-A166P-Ubuntu-LXC-Docker-KernelSU-${BUILD_KERNEL_VERSION}.zip" \
+        "SM-A166P-Ubuntu-LXC-Docker-KernelSU-${BUILD_KERNEL_VERSION}.tar" \
+        vendor_dlkm.img || {
+        echo "Error: Failed to create zip file"
+        return 1
+    }
+
+    rm -f "SM-A166P-Ubuntu-LXC-Docker-KernelSU-${BUILD_KERNEL_VERSION}.tar" vendor_dlkm.img boot.img vendor_boot.img
+
+    cd "${SCRIPT_DIR}"
+}
+
 clean_up
 install_requirements
 export_common_build_env
@@ -162,3 +183,7 @@ export_custom_build_env
 build_gki_kernel || exit 1
 build_vendor_boot || exit 1
 build_vendor_dlkm || exit 1
+package_stuff || exit 1
+
+echo ""
+echo "[INFO] Kernel build completed successfully"
