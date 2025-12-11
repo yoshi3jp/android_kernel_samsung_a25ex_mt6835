@@ -77,7 +77,9 @@ export_custom_build_env(){
 build_gki_kernel(){
     cd "${SCRIPT_DIR}/kernel"
     env "${GKI_KERNEL_BUILD_OPTIONS[@]}" ./build/build.sh
+    local exit_code=$?
     cd "${SCRIPT_DIR}"
+    return $exit_code
 }
 
 install_requirements
