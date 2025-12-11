@@ -1,0 +1,9 @@
+prebuilts/
+kernel/prebuilts/
+dist/
+out/
+*.patch
+*.orig
+*.reg
+*.zip
+*.tar
