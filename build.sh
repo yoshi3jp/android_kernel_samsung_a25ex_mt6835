@@ -73,6 +73,14 @@ export_custom_build_env(){
         "ABI_DEFINITION="
     )
 
+    # Run menuconfig only if you want to.
+    # It's better to use MAKE_MENUCONFIG=0 when everything is already properly enabled, disabled, or configured.
+    export MAKE_MENUCONFIG=0
+
+    if [ "$MAKE_MENUCONFIG" = "1" ]; then
+        export HERMETIC_TOOLCHAIN=0
+    fi
+
 }
 
 # main kernel build function
