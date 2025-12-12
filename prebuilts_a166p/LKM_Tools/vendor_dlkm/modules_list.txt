@@ -2,6 +2,12 @@ adsp.ko
 archcounter_timesync.ko
 arm_dsu_pmu.ko
 atf_logger.ko
+ath6kl_core.ko
+ath6kl_usb.ko
+ath9k_common.ko
+ath9k_htc.ko
+ath9k_hw.ko
+ath.ko
 audio_ipi.ko
 backlight_cooling.ko
 blk-sec-common.ko
@@ -20,6 +26,7 @@ camera_fdvt_isp51.ko
 camera_isp.ko
 camera_mem.ko
 cam_qos.ko
+carl9170.ko
 ccci_auxadc.ko
 ccci_ccif.ko
 ccci_dpmaif.ko

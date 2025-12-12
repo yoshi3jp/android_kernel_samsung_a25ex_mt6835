@@ -165,3 +165,9 @@ mtk-swpm-core-dbg-v6835.ko
 tuihw-inf.ko
 tuihw.ko
 input_booster_lkm.ko
+ath.ko
+ath9k_hw.ko
+ath9k_htc.ko
+ath9k_common.ko
+ath6kl_usb.ko
+ath6kl_core.ko
