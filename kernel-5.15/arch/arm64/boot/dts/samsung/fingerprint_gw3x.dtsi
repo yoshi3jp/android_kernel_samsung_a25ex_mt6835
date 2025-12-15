@@ -1,0 +1,179 @@
+/*
+ * Copyright (c) 2020, The Linux Foundation. All rights reserved.
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 and
+ * only version 2 as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+
+&pio {
+	gfspi_drdypin_active: gfspi_drdypin_active {
+		pins_cmd_dat{
+			pinmux = <MTK_PINMUX(SEC_GPIO_NUM(AP,pio,15), 0)>;
+			bias-disable;
+			drive-strength = <1>;
+		};
+	};
+	gfspi_drdypin_suspend: gfspi_drdypin_suspend {
+		pins_cmd_dat{
+			pinmux = <MTK_PINMUX(SEC_GPIO_NUM(AP,pio,15), 0)>;
+			bias-pull-down;
+			drive-strength = <1>;
+		};
+	};
+};
+
+&pio {
+	gfspi_rstpin: gfspi_rstpin {
+		pins_cmd_dat{
+			pinmux = <MTK_PINMUX(SEC_GPIO_NUM(AP,pio,34), 0)>;
+			bias-pull-down;
+			drive-strength = <1>;
+		};
+	};
+};
+
+#if 0
+&${fps_ldo_vdd_3p3_parent} {
+	gfspi_ldopin: gfspi_ldopin {
+		pins_cmd_dat {
+			pinmux = <MTK_PINMUX(SEC_GPIO_NUM(${fps_ldo_vdd_3p3}), 0)>;
+			bias-pull-down;
+		};
+	};
+};
+#endif
+
+&pio {
+	fps_set_miso: set_miso {
+		pins_cmd_dat{
+			pinmux = <MTK_PINMUX(SEC_GPIO_NUM(AP,pio,71), 2)>;
+			drive-strength = <4>;
+		};
+	};
+	fps_set_cs: set_cs {
+		pins_cmd_dat{
+			pinmux = <MTK_PINMUX(SEC_GPIO_NUM(AP,pio,69), 2)>;
+			drive-strength = <4>;
+		};
+	};
+	fps_set_mosi: set_mosi {
+		pins_cmd_dat{
+			pinmux = <MTK_PINMUX(SEC_GPIO_NUM(AP,pio,70), 2)>;
+			drive-strength = <4>;
+		};
+	};
+	fps_set_clk: set_clk {
+		pins_cmd_dat{
+			pinmux = <MTK_PINMUX(SEC_GPIO_NUM(AP,pio,68), 2)>;
+			drive-strength = <4>;
+		};
+	};
+	fps_clr_miso: clr_miso {
+		pins_cmd_dat{
+			pinmux = <MTK_PINMUX(SEC_GPIO_NUM(AP,pio,71), 0)>;
+			slew-rate = <0>;
+			bias-pull-down;
+			input-enable;
+			drive-strength = <1>;
+		};
+	};
+	fps_clr_cs: clr_cs {
+		pins_cmd_dat{
+			pinmux = <MTK_PINMUX(SEC_GPIO_NUM(AP,pio,69), 0)>;
+			slew-rate = <0>;
+			bias-pull-down;
+			output-low;
+			drive-strength = <1>;
+		};
+	};
+	fps_clr_mosi: clr_mosi {
+		pins_cmd_dat{
+			pinmux = <MTK_PINMUX(SEC_GPIO_NUM(AP,pio,70), 0)>;
+			slew-rate = <0>;
+			bias-pull-down;
+			output-low;
+			drive-strength = <1>;
+		};
+	};
+	fps_clr_clk: clr_clk {
+		pins_cmd_dat{
+			pinmux = <MTK_PINMUX(SEC_GPIO_NUM(AP,pio,68), 0)>;
+			slew-rate = <0>;
+			bias-pull-down;
+			output-low;
+			drive-strength = <1>;
+		};
+	};
+};
+
+#if 1
+&mt6377_vfp {
+	regulator-name = "VDD_BTP_3P3";
+	regulator-min-microvolt = <3300000>;
+	regulator-max-microvolt = <3300000>;
+	regulator-ramp-delay = <12000>;
+};
+#endif
+
+
+#if defined(CONFIG_SEC_FACTORY) || !1
+&spi3 {
+	status = "okay";
+#else
+/ {
+	fragment@smd {
+		target-path = "/";
+		__overlay__ {
+#endif
+			gw3x {
+				compatible = "goodix,fingerprint";
+				reg = <0>;
+				spi-max-frequency = <9600000>;
+#if !defined(CONFIG_SEC_FACTORY) && 1
+				clocks = <&topckgen CLK_TOP_UNIVPLL_D6_D2>,
+						<&topckgen CLK_TOP_SPI_SEL>,
+						<&infracfg_ao CLK_PERAOP_SPI3_BCLK>;
+				clock-names = "parent-clk", "sel-clk", "spi-clk";
+#endif
+				pinctrl-names = "default", "pins_poweron", "pins_poweroff"
+								, "pins_poweron_tz", "pins_poweroff_tz";
+#if 0
+				pinctrl-0 = <&gfspi_ldopin &gfspi_rstpin &gfspi_drdypin_suspend>;
+#else
+				pinctrl-0 = <&gfspi_rstpin &gfspi_drdypin_suspend>;
+#endif
+				pinctrl-1 = <&gfspi_drdypin_active &fps_set_miso &fps_set_cs &fps_set_mosi &fps_set_clk>;
+				pinctrl-2 = <&gfspi_drdypin_suspend &fps_clr_miso &fps_clr_cs &fps_clr_mosi &fps_clr_clk>;
+				pinctrl-3 = <&gfspi_drdypin_active>;
+				pinctrl-4 = <&gfspi_drdypin_suspend>;
+
+				gpio-controller;
+				#gpio-cells = <2>;
+
+#if 0
+				goodix,gpio_pwr = <SEC_GPIO_REF(${fps_ldo_vdd_3p3}) 0>;
+#endif
+#if 1
+				goodix,btp-regulator = "VDD_BTP_3P3";
+				VDD_BTP_3P3-supply = <&mt6377_vfp>;
+#endif
+				goodix,gpio_reset = <SEC_GPIO_REF(AP,pio,34) 0>;
+				goodix,gpio_irq = <SEC_GPIO_REF(AP,pio,15) 0>;
+				goodix,chip_id = "GW36T";
+				goodix,orient = <0>;
+				goodix,position = "53.9,13.39";
+#if defined(CONFIG_SEC_FACTORY)
+				goodix,spi_cs_setup_ns_delay = <50>;
+#endif
+			};
+#if !defined(CONFIG_SEC_FACTORY) && 1
+		};
+	};
+#endif
+};
