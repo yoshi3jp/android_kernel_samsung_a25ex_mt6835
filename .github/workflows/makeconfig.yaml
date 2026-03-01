@@ -1,0 +1,90 @@
+name: Generate build.config (A25ex kernel-5.15)
+
+on:
+  workflow_dispatch:
+    inputs:
+      defconfig:
+        description: "Kernel defconfig name (under kernel-5.15/arch/arm64/configs or vendor location used by your tree)"
+        required: true
+        default: "a25ex_00_defconfig"
+      overlays:
+        description: "Defconfig overlay fragments (space-separated), as accepted by gen_build_config.py"
+        required: true
+        default: "entry_level.config"
+      mode:
+        description: "Build mode passed to gen_build_config.py (-m), e.g. user/userdebug/eng"
+        required: true
+        default: "user"
+      product:
+        description: "Product name for out/target/product/<product>/..."
+        required: true
+        default: "a25ex"
+      out_rel:
+        description: "OUT_DIR relative to repo root (will also hold build.config)"
+        required: true
+        default: "out/target/product/a25ex/obj/KERNEL_OBJ"
+
+jobs:
+  gen-build-config:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Show repo layout (sanity)
+        shell: bash
+        run: |
+          set -euo pipefail
+          ls -la
+          test -d kernel-5.15
+          test -f kernel-5.15/scripts/gen_build_config.py
+          echo "Found kernel-5.15/scripts/gen_build_config.py"
+
+      - name: Install minimal host deps (python only)
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            python3 python3-venv python3-distutils \
+            ca-certificates
+          python3 --version
+
+      - name: Generate build.config
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          DEFCONFIG="${{ inputs.defconfig }}"
+          OVERLAYS="${{ inputs.overlays }}"
+          MODE="${{ inputs.mode }}"
+          PRODUCT="${{ inputs.product }}"
+          OUT_REL="${{ inputs.out_rel }}"
+
+          # Ensure output directory exists
+          mkdir -p "${OUT_REL}"
+
+          # Match your local script logic: run from kernel-5.15 and emit to ../out/...
+          pushd kernel-5.15 >/dev/null
+          python3 scripts/gen_build_config.py \
+            --kernel-defconfig "${DEFCONFIG}" \
+            --kernel-defconfig-overlays "${OVERLAYS}" \
+            -m "${MODE}" \
+            -o "../${OUT_REL}/build.config"
+          popd >/dev/null
+
+          echo "Generated: ${OUT_REL}/build.config"
+          echo "---- build.config (first 200 lines) ----"
+          sed -n '1,200p' "${OUT_REL}/build.config" || true
+          echo "---- end ----"
+
+      - name: Upload build.config artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: build.config-${{ inputs.product }}-${{ inputs.mode }}
+          path: |
+            ${{ inputs.out_rel }}/build.config
+          if-no-files-found: error
