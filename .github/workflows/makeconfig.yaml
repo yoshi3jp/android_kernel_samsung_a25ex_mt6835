@@ -1,28 +1,40 @@
-name: Generate build.config (A25ex kernel-5.15)
+name: Generate build.config (Samsung A25ex kernel-5.15)
 
 on:
   workflow_dispatch:
     inputs:
-      defconfig:
-        description: "Kernel defconfig name (under kernel-5.15/arch/arm64/configs or vendor location used by your tree)"
-        required: true
-        default: "a25ex_00_defconfig"
-      overlays:
-        description: "Defconfig overlay fragments (space-separated), as accepted by gen_build_config.py"
-        required: true
-        default: "entry_level.config"
-      mode:
-        description: "Build mode passed to gen_build_config.py (-m), e.g. user/userdebug/eng"
-        required: true
-        default: "user"
       product:
         description: "Product name for out/target/product/<product>/..."
         required: true
         default: "a25ex"
-      out_rel:
-        description: "OUT_DIR relative to repo root (will also hold build.config)"
+      kernel_dir:
+        description: "Kernel source directory (contains scripts/gen_build_config.py)"
         required: true
-        default: "out/target/product/a25ex/obj/KERNEL_OBJ"
+        default: "kernel-5.15"
+      clang_version:
+        description: "AOSP Clang prebuilt version directory (e.g., r450784e)"
+        required: true
+        default: "r450784e"
+      clang_branch:
+        description: "AOSP branch/ref for Clang prebuilts (used for archive fetch)"
+        required: true
+        default: "android14-release"
+      build_tools_branch:
+        description: "AOSP branch/ref for kernel build-tools prebuilts"
+        required: true
+        default: "main"
+      defconfig:
+        description: "Kernel defconfig name"
+        required: true
+        default: "a25ex_00_defconfig"
+      overlays:
+        description: "Defconfig overlay fragments (passed as one string arg)"
+        required: true
+        default: "entry_level.config"
+      mode:
+        description: "gen_build_config.py mode (-m): user/userdebug/eng"
+        required: true
+        default: "user"
 
 jobs:
   gen-build-config:
@@ -34,57 +46,114 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Show repo layout (sanity)
+      - name: Install minimal host deps
         shell: bash
         run: |
           set -euo pipefail
-          ls -la
-          test -d kernel-5.15
-          test -f kernel-5.15/scripts/gen_build_config.py
-          echo "Found kernel-5.15/scripts/gen_build_config.py"
-
-      - name: Install minimal host deps (python only)
-        shell: bash
-        run: |
-          set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
+          sudo apt update
+          sudo apt install -y --no-install-recommends \
+            ca-certificates curl git \
             python3 python3-venv python3-setuptools \
-            ca-certificates
+            xz-utils unzip zip \
+            file rsync
           python3 --version
 
-      - name: Generate build.config
+      - name: Compute OUT_REL from product
+        id: vars
+        shell: bash
+        run: |
+          set -euo pipefail
+          PRODUCT="${{ inputs.product }}"
+          OUT_REL="out/target/product/${PRODUCT}/obj/KERNEL_OBJ"
+          echo "out_rel=${OUT_REL}" >> "$GITHUB_OUTPUT"
+          echo "OUT_REL=${OUT_REL}" >> "$GITHUB_ENV"
+
+      - name: Fetch AOSP clang prebuilt
+        shell: bash
+        run: |
+          set -euo pipefail
+          CLANG_VERSION="${{ inputs.clang_version }}"
+          CLANG_BRANCH="${{ inputs.clang_branch }}"
+          DEST="prebuilts/clang/host/linux-x86/clang-${CLANG_VERSION}"
+
+          mkdir -p "${DEST}"
+
+          curl -L --fail \
+            "https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/${CLANG_BRANCH}/clang-${CLANG_VERSION}.tar.gz" \
+            -o /tmp/clang.tgz
+
+          tar -xzf /tmp/clang.tgz -C "${DEST}"
+
+          test -x "${DEST}/bin/clang"
+          "${DEST}/bin/clang" --version | head -n 2
+
+      - name: Fetch Android kernel build-tools prebuilts (linux-x86)
+        shell: bash
+        run: |
+          set -euo pipefail
+          BT_BRANCH="${{ inputs.build_tools_branch }}"
+          DEST="prebuilts/kernel-build-tools/linux-x86"
+
+          mkdir -p "${DEST}"
+
+          curl -L --fail \
+            "https://android.googlesource.com/kernel/prebuilts/build-tools/+archive/refs/heads/${BT_BRANCH}/linux-x86.tar.gz" \
+            -o /tmp/kbt.tgz
+
+          tar -xzf /tmp/kbt.tgz -C "${DEST}"
+
+          test -x "${DEST}/bin/dtc"
+          "${DEST}/bin/dtc" --version || true
+
+      - name: Provide build/kernel/build-tools/path/linux-x86 (shim expected by build.config.common)
         shell: bash
         run: |
           set -euo pipefail
 
-          DEFCONFIG="${{ inputs.defconfig }}"
-          OVERLAYS="${{ inputs.overlays }}"
-          MODE="${{ inputs.mode }}"
-          PRODUCT="${{ inputs.product }}"
-          OUT_REL="${{ inputs.out_rel }}"
+          # Your kernel-5.15/build.config.common hardcodes:
+          #   BUILDTOOLS_PREBUILT_BIN=build/kernel/build-tools/path/linux-x86
+          # and uses e.g. DTC=${ROOT_DIR}/${BUILDTOOLS_PREBUILT_BIN}/dtc
+          SHIM="build/kernel/build-tools/path/linux-x86"
+          SRC="prebuilts/kernel-build-tools/linux-x86/bin"
 
-          # Ensure output directory exists
+          mkdir -p "${SHIM}"
+
+          # Create/refresh per-tool symlinks so dtc/pahole/lz4/etc are found at the shim path.
+          while IFS= read -r -d '' f; do
+            bn="$(basename "$f")"
+            ln -sf "../../../../../prebuilts/kernel-build-tools/linux-x86/bin/${bn}" "${SHIM}/${bn}"
+          done < <(find "${SRC}" -maxdepth 1 -type f -print0)
+
+          test -x "${SHIM}/dtc"
+          "${SHIM}/dtc" --version || true
+
+      - name: Generate build.config (+ fragments) into OUT_REL
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          KERNEL_DIR="${{ inputs.kernel_dir }}"
           mkdir -p "${OUT_REL}"
 
-          # Match your local script logic: run from kernel-5.15 and emit to ../out/...
-          pushd kernel-5.15 >/dev/null
+          pushd "${KERNEL_DIR}" >/dev/null
           python3 scripts/gen_build_config.py \
-            --kernel-defconfig "${DEFCONFIG}" \
-            --kernel-defconfig-overlays "${OVERLAYS}" \
-            -m "${MODE}" \
+            --kernel-defconfig "${{ inputs.defconfig }}" \
+            --kernel-defconfig-overlays "${{ inputs.overlays }}" \
+            -m "${{ inputs.mode }}" \
             -o "../${OUT_REL}/build.config"
           popd >/dev/null
 
-          echo "Generated: ${OUT_REL}/build.config"
-          echo "---- build.config (first 200 lines) ----"
-          sed -n '1,200p' "${OUT_REL}/build.config" || true
-          echo "---- end ----"
+          echo "== Generated files in ${OUT_REL} =="
+          ls -la "${OUT_REL}"
+          echo
+          echo "== build.config (first 160 lines) =="
+          sed -n '1,160p' "${OUT_REL}/build.config"
 
-      - name: Upload build.config artifact
+      - name: Upload generated build.config + fragments
         uses: actions/upload-artifact@v4
         with:
-          name: build.config-${{ inputs.product }}-${{ inputs.mode }}
+          name: build-config-${{ inputs.product }}-${{ inputs.mode }}
           path: |
-            ${{ inputs.out_rel }}/build.config
+            ${{ steps.vars.outputs.out_rel }}/build.config
+            ${{ steps.vars.outputs.out_rel }}/build.config.*
           if-no-files-found: error
