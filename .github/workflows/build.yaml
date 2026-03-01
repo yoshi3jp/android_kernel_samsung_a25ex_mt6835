@@ -86,7 +86,8 @@ jobs:
       - name: Build kernel (build.sh)
         shell: bash
         run: |
-          set -euo pipefail
+          set -Eeuo pipefail
+          set -x
 
           # Match your local build script intent
           export ARCH=arm64
@@ -102,6 +103,8 @@ jobs:
           export OUT_DIR
           export DIST_DIR
           export BUILD_CONFIG
+
+          trap 'ec=$?; echo "::error::build.sh failed (exit=$ec) at line $LINENO: $BASH_COMMAND"; echo "----- tail of build.log -----"; tail -n 200 build.log 2>/dev/null || true; exit $ec' ERR
 
           # Run Android kernel build driver
           cd kernel
