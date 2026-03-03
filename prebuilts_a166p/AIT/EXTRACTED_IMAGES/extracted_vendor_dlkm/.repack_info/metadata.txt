@@ -1,0 +1,5 @@
+UNPACK_TIME=1765468047
+SOURCE_IMAGE=/home/ravindu644/Desktop/Github/android_kernel_a166p/prebuilts_a166p/AIT/INPUT_IMAGES/vendor_dlkm.img
+FILESYSTEM_TYPE=erofs
+MOUNT_METHOD=kernel
+ORIGINAL_UUID=5e091366-a86a-8544-9a1c-e9692ad1400d

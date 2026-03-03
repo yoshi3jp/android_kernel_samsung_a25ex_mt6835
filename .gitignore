@@ -1,0 +1,13 @@
+prebuilts/
+kernel/prebuilts/
+dist/
+out/
+*.patch
+*.orig
+*.reg
+*.zip
+*.tar
+custom_defconfigs/version_defconfig
+kernel-5.15/drivers/misc/mediatek/
+prebuilts_a166p/boot_editor_v15_r1/
+vendor/mediatek/kernel_modules/
