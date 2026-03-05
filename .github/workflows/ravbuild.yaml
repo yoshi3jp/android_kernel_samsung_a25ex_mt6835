@@ -93,10 +93,11 @@ jobs:
             -o "$ROOT/$OUT_DIR/build.config" \
             >/dev/null
 
-      - name: Export build environment + build GKI kernel (kernel/build/build.sh)
+      - name: Build GKI kernel (FULL LOGS + env/toolchain diagnostics)
         run: |
-          set -euo pipefail
+          set -euxo pipefail
           ROOT="$GITHUB_WORKSPACE"
+          mkdir -p "$ROOT/_logs"
 
           # ----- export_common_build_env -----
           export ARCH=arm64
@@ -115,7 +116,6 @@ jobs:
 
           export MERGE_CONFIG="$ROOT/kernel-5.15/scripts/kconfig/merge_config.sh"
 
-          # Collect realpaths as a space-separated list (as script does)
           if [[ -d "$ROOT/custom_defconfigs" ]]; then
             CUSTOM_DEFCONFIGS_LIST="$(find "$ROOT/custom_defconfigs" -maxdepth 1 -type f -exec realpath {} \; | tr '\n' ' ')"
           else
@@ -123,7 +123,38 @@ jobs:
           fi
           export CUSTOM_DEFCONFIGS_LIST
 
-          # GKI_KERNEL_BUILD_OPTIONS array
+          # Log critical env + toolchain visibility
+          {
+            echo "===== ENV DUMP (selected) ====="
+            echo "ROOT=$ROOT"
+            echo "ARCH=$ARCH"
+            echo "OUT_DIR=$OUT_DIR"
+            echo "DIST_DIR=$DIST_DIR"
+            echo "BUILD_CONFIG=$BUILD_CONFIG"
+            echo "CROSS_COMPILE=$CROSS_COMPILE"
+            echo "CROSS_COMPILE_COMPAT=$CROSS_COMPILE_COMPAT"
+            echo "CUSTOM_DEFCONFIGS_LIST=$CUSTOM_DEFCONFIGS_LIST"
+            echo "PATH=$PATH"
+            echo ""
+            echo "===== TOOLCHAIN PROBES ====="
+            which python3 || true
+            python3 -V || true
+            which clang || true
+            clang --version || true
+            which ld.lld || true
+            ld.lld --version || true
+            which aarch64-linux-gnu-gcc || true
+            aarch64-linux-gnu-gcc --version || true
+            which arm-linux-gnueabi-gcc || true
+            arm-linux-gnueabi-gcc --version || true
+            echo ""
+            echo "===== PREBUILTS TREE (if present) ====="
+            ls -la "$ROOT/prebuilts" || true
+            ls -la "$ROOT/kernel/prebuilts" || true
+            ls -la "$ROOT/prebuilts_a166p" || true
+          } |& tee "$ROOT/_logs/env_and_toolchain.log"
+
+          # Same options as your build.sh
           GKI_KERNEL_BUILD_OPTIONS=(
             "SKIP_MRPROPER=1"
             "KMI_SYMBOL_LIST_STRICT_MODE=0"
@@ -141,21 +172,28 @@ jobs:
           )
           export GKI_KERNEL_BUILD_OPTIONS
 
-          # MKBOOTIMG_EXTRA_ARGS (from build.sh)
           export MKBOOTIMG_EXTRA_ARGS="\
           --os_version 13.0.0 \
           --os_patch_level 2025-07-00 \
           --pagesize 4096 \
           "
 
-          # ----- build_gki_kernel (from build.sh) -----
+          echo "[INFO] Starting kernel build..." |& tee "$ROOT/_logs/build_gki_kernel.log"
           cd "$ROOT/kernel"
-          env "${GKI_KERNEL_BUILD_OPTIONS[@]}" ./build/build.sh
 
-          # Copy outputs to dist (match build.sh paths)
+          # IMPORTANT: pipe everything to tee so you can see it later.
+          # Also force unbuffered output with -u where possible; build.sh is shell so we rely on tee.
+          env "${GKI_KERNEL_BUILD_OPTIONS[@]}" ./build/build.sh |& tee -a "$ROOT/_logs/build_gki_kernel.log"
+
+          echo "[INFO] Post-build outputs listing:" |& tee -a "$ROOT/_logs/build_gki_kernel.log"
+          ls -la "$ROOT/$OUT_DIR" |& tee -a "$ROOT/_logs/build_gki_kernel.log" || true
+          find "$ROOT/$OUT_DIR" -maxdepth 4 -type f |& tee -a "$ROOT/_logs/build_gki_kernel.log" || true
+
+          # Copy outputs to dist
           cp "$ROOT/$OUT_DIR/kernel-5.15/arch/arm64/boot/Image"* \
              "$ROOT/$OUT_DIR/dist/boot.img" \
-             "$ROOT/dist"
+             "$ROOT/dist" \
+             |& tee -a "$ROOT/_logs/build_gki_kernel.log"
 
       - name: Build vendor_boot
         run: |
