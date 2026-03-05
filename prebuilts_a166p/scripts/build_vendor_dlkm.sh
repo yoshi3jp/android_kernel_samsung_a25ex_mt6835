@@ -3,7 +3,7 @@
 # core variables
 REPO_ROOT="${SCRIPT_DIR}"
 LKM_TOOLS_DIR="${REPO_ROOT}/prebuilts_a166p/LKM_Tools"
-KBUILD_PATH="${REPO_ROOT}/out/target/product/a16xm/obj/KERNEL_OBJ"
+KBUILD_PATH="${REPO_ROOT}/out/target/product/a25ex/obj/KERNEL_OBJ"
 AIT_DIR="${REPO_ROOT}/prebuilts_a166p/AIT"
 PKG_VENDOR_DLKM="${LKM_TOOLS_DIR}/03.prepare_vendor_dlkm.sh"
 
