@@ -200,7 +200,7 @@ def main(**args):
     file_handle.write(kernel_defconfig_cmds + '\n')
 
     file_handle.write('\nBUILD_CONFIG_FRAGMENTS="${KERNEL_DIR}/build.config.common"\n')
-    file_handle.write('GET_CONFIG_ABI_MONITOR=`grep \"^CONFIG_ABI_MONITOR\s*=\s*y\" ${KERNEL_DEFCONFIG_FILE} | xargs`\n')
+    file_handle.write('GET_CONFIG_ABI_MONITOR=`grep \"^CONFIG_ABI_MONITOR\\s*=\\s*y\" ${KERNEL_DEFCONFIG_FILE} | xargs`\n')
     file_handle.write('if [ "${KERNEL_BUILD_MODE}" == "user" ] && [ "x${GET_CONFIG_ABI_MONITOR}" != "x" ]; then\n')
     file_handle.write('  DO_ABI_MONITOR=1\n')
     build_config_fragments = '  BUILD_CONFIG_FRAGMENTS="${BUILD_CONFIG_FRAGMENTS} ${REL_GEN_BUILD_CONFIG_DIR}/%s' % (os.path.basename(gen_build_config_gki))
