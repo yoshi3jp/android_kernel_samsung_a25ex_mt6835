@@ -76,6 +76,7 @@ export_custom_build_env(){
     # add custom build options to here
     # check out the kernel/build/build.sh to possible variables
     export GKI_KERNEL_BUILD_OPTIONS=(
+        "LTO=thin"
         "SKIP_MRPROPER=1"
         "KMI_SYMBOL_LIST_STRICT_MODE=0"
         "ABI_DEFINITION="
