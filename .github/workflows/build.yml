@@ -81,7 +81,7 @@ jobs:
             |-----------|-------------------------------|
             | Device    | Samsung Galaxy A16 (SM-A166P) |
             | Firmware  | A166PXXS4AYC1                 |
-            | One UI    | 6 (Android 13)                |
+            | One UI    | 6 (Android 14)                |
             | Kernel    | 5.15                          |
             | Build tag | `${{ steps.tag.outputs.tag }}` |
             | Version   | `${{ github.event.inputs.kernel_version || 'dev' }}` |
