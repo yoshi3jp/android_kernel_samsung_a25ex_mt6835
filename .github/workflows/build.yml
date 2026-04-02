@@ -1,0 +1,106 @@
+name: KernelSU · SM-A166P One UI 6
+
+on:
+  workflow_dispatch:
+    inputs:
+      kernel_version:
+        description: "Kernel localversion suffix (e.g. 1.0.0)"
+        required: false
+        default: "dev"
+
+jobs:
+  build:
+    name: Build KernelSU — A166PXXS4AYC1
+    runs-on: ubuntu-latest
+
+    env:
+      ARTIFACT_BASE: "KernelSU-SM-A166P-OneUI6-A166PXXS4AYC1"
+
+    steps:
+      # 1. Checkout
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      # 2. Host dependencies
+      - name: Install host build dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y \
+            rsync curl bc bison flex libssl-dev libelf-dev \
+            gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi \
+            binutils-aarch64-linux-gnu binutils-arm-linux-gnueabi \
+            python3 python3-pip zip tar
+
+      # 3. Generate random release tag
+      - name: Generate release tag
+        id: tag
+        run: |
+          RAND=$(openssl rand -hex 4)
+          DATE=$(date -u +'%Y%m%d')
+          TAG="r${DATE}-${RAND}"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "Generated release tag: ${TAG}"
+
+      # 4. Build kernel
+      - name: Build kernel
+        env:
+          BUILD_KERNEL_VERSION: ${{ github.event.inputs.kernel_version || 'dev' }}
+        run: |
+          chmod +x build.sh
+          ./build.sh
+
+      # 5. Verify boot.img was produced
+      - name: Verify boot.img
+        run: |
+          if [[ ! -f dist/boot.img ]]; then
+            echo "::error::boot.img not found in dist/ — build may have failed."
+            exit 1
+          fi
+          echo "boot.img size: $(du -sh dist/boot.img | cut -f1)"
+
+      # 6. Package → tar, then zip
+      - name: Package boot.img (tar → zip)
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          ARCHIVE_NAME="${ARTIFACT_BASE}-${TAG}"
+
+          # Step 1 — tar
+          tar -cvf "${ARCHIVE_NAME}.tar" -C dist boot.img
+
+          # Step 2 — zip the tar
+          zip "${ARCHIVE_NAME}.tar.zip" "${ARCHIVE_NAME}.tar"
+
+          echo "archive=${ARCHIVE_NAME}.tar.zip" >> "$GITHUB_ENV"
+          echo "archive_name=${ARCHIVE_NAME}"    >> "$GITHUB_ENV"
+
+      # 7. Create GitHub Release & upload asset
+      - name: Create release and upload archive
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: "KernelSU · SM-A166P · One UI 6 · A166PXXS4AYC1 [${{ steps.tag.outputs.tag }}]"
+          body: |
+            ## KernelSU Kernel — SM-A166P
+
+            | Field        | Value                          |
+            |--------------|--------------------------------|
+            | Device       | Samsung Galaxy A16 (SM-A166P)  |
+            | Firmware     | A166PXXS4AYC1                  |
+            | One UI       | 6 (Android 14)                 |
+            | Kernel       | 5.15                           |
+            | Build tag    | `${{ steps.tag.outputs.tag }}` |
+            | Version      | `${{ github.event.inputs.kernel_version || 'dev' }}` |
+
+            ### Installation
+            Flash `boot.img` (extracted from the archive) via `fastboot` or a custom recovery.
+
+            > ⚠️ This is an automated build. Flash at your own risk.
+          files: ${{ env.archive }}
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
