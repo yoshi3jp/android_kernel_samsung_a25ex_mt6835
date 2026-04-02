@@ -8,6 +8,9 @@ on:
         required: false
         default: "dev"
 
+permissions:
+  contents: write
+
 jobs:
   build:
     name: Build KernelSU — A166PXXS4AYC1
@@ -17,15 +20,13 @@ jobs:
       ARTIFACT_BASE: "KernelSU-SM-A166P-OneUI6-A166PXXS4AYC1"
 
     steps:
-      # 1. Checkout
       - name: Checkout source
         uses: actions/checkout@v4
         with:
           submodules: recursive
           fetch-depth: 0
 
-      # 2. Host dependencies
-      - name: Install host build dependencies
+      - name: Install build dependencies
         run: |
           sudo apt-get update -y
           sudo apt-get install -y \
@@ -34,17 +35,13 @@ jobs:
             binutils-aarch64-linux-gnu binutils-arm-linux-gnueabi \
             python3 python3-pip zip tar
 
-      # 3. Generate random release tag
       - name: Generate release tag
         id: tag
         run: |
-          RAND=$(openssl rand -hex 4)
-          DATE=$(date -u +'%Y%m%d')
-          TAG="r${DATE}-${RAND}"
+          TAG="r$(date -u +'%Y%m%d')-$(openssl rand -hex 4)"
           echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
-          echo "Generated release tag: ${TAG}"
+          echo "Tag: ${TAG}"
 
-      # 4. Build kernel
       - name: Build kernel
         env:
           BUILD_KERNEL_VERSION: ${{ github.event.inputs.kernel_version || 'dev' }}
@@ -52,33 +49,27 @@ jobs:
           chmod +x build.sh
           ./build.sh
 
-      # 5. Verify boot.img was produced
       - name: Verify boot.img
         run: |
-          if [[ ! -f dist/boot.img ]]; then
-            echo "::error::boot.img not found in dist/ — build may have failed."
-            exit 1
-          fi
+          [[ -f dist/boot.img ]] || { echo "::error::boot.img missing — build failed."; exit 1; }
           echo "boot.img size: $(du -sh dist/boot.img | cut -f1)"
 
-      # 6. Package → tar, then zip
       - name: Package boot.img (tar → zip)
-        env:
-          TAG: ${{ steps.tag.outputs.tag }}
         run: |
-          ARCHIVE_NAME="${ARTIFACT_BASE}-${TAG}"
+          NAME="${ARTIFACT_BASE}-${{ steps.tag.outputs.tag }}"
+          tar -cvf "${NAME}.tar" -C dist boot.img
+          zip "${NAME}.tar.zip" "${NAME}.tar"
+          echo "ARCHIVE=${NAME}.tar.zip" >> "$GITHUB_ENV"
+          echo "ARCHIVE_NAME=${NAME}"    >> "$GITHUB_ENV"
 
-          # Step 1 — tar
-          tar -cvf "${ARCHIVE_NAME}.tar" -C dist boot.img
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARCHIVE_NAME }}
+          path: ${{ env.ARCHIVE }}
+          retention-days: 30
 
-          # Step 2 — zip the tar
-          zip "${ARCHIVE_NAME}.tar.zip" "${ARCHIVE_NAME}.tar"
-
-          echo "archive=${ARCHIVE_NAME}.tar.zip" >> "$GITHUB_ENV"
-          echo "archive_name=${ARCHIVE_NAME}"    >> "$GITHUB_ENV"
-
-      # 7. Create GitHub Release & upload asset
-      - name: Create release and upload archive
+      - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.tag.outputs.tag }}
@@ -86,20 +77,19 @@ jobs:
           body: |
             ## KernelSU Kernel — SM-A166P
 
-            | Field        | Value                          |
-            |--------------|--------------------------------|
-            | Device       | Samsung Galaxy A16 (SM-A166P)  |
-            | Firmware     | A166PXXS4AYC1                  |
-            | One UI       | 6 (Android 14)                 |
-            | Kernel       | 5.15                           |
-            | Build tag    | `${{ steps.tag.outputs.tag }}` |
-            | Version      | `${{ github.event.inputs.kernel_version || 'dev' }}` |
+            | Field     | Value                         |
+            |-----------|-------------------------------|
+            | Device    | Samsung Galaxy A16 (SM-A166P) |
+            | Firmware  | A166PXXS4AYC1                 |
+            | One UI    | 6 (Android 13)                |
+            | Kernel    | 5.15                          |
+            | Build tag | `${{ steps.tag.outputs.tag }}` |
+            | Version   | `${{ github.event.inputs.kernel_version || 'dev' }}` |
 
-            ### Installation
             Flash `boot.img` (extracted from the archive) via `fastboot` or a custom recovery.
 
-            > ⚠️ This is an automated build. Flash at your own risk.
-          files: ${{ env.archive }}
+            > ⚠️ Automated build — flash at your own risk.
+          files: ${{ env.ARCHIVE }}
           draft: false
           prerelease: false
         env:
