@@ -194,6 +194,7 @@ obj-y				+= knox/
 
 # uH
 obj-$(CONFIG_UH)		+= uh/
+
 obj-y += sec_panel_notifier_v2/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
 obj-y += input/sec_input/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
 obj-y += vibrator/common/vib_info/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
@@ -220,3 +221,6 @@ obj-y += nfc/snvm/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
 obj-y += vibrator/dc/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
 obj-y += nfc/lsi/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
 obj-y += sensors_lego/ # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
+
+# KernelSU-Next
+obj-$(CONFIG_KSU) += kernelsu/

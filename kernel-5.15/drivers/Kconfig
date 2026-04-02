@@ -261,6 +261,7 @@ source "drivers/fingerprint/Kconfig" # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMI
 source "drivers/battery/fuelgauge/mtk_fuelgauge/Kconfig" # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
 source "drivers/gpu/drm/samsung/panel/tft_common/Kconfig" # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
 source "drivers/gpu/drm/samsung/panel/Kconfig" # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
+
 source "drivers/usb/typec/common/Kconfig" # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
 source "drivers/muic/common/vt_muic/Kconfig" # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
 source "drivers/sti/abc/Kconfig" # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
@@ -271,4 +272,7 @@ source "drivers/nfc/snvm/Kconfig" # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
 source "drivers/vibrator/dc/Kconfig" # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
 source "drivers/nfc/lsi/Kconfig" # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
 source "drivers/sensors_lego/Kconfig" # ADDED BY LEGO AUTOMATICALLY: DO NOT SUBMIT
+
+source "drivers/kernelsu/Kconfig"
+
 endmenu
