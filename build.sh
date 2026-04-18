@@ -67,7 +67,7 @@ export_common_build_env() {
     # cook build config
     python3 scripts/gen_build_config.py \
         --kernel-defconfig a25ex_00_defconfig \
-        --kernel-defconfig-overlays "entry_level.config" \
+        --kernel-defconfig-overlays "entry_level.config droidspaces.config" \
         -m user -o ../out/target/product/a25ex/obj/KERNEL_OBJ/build.config
 
     # common exports from samsung's build_kernel.sh
@@ -178,7 +178,7 @@ package_stuff(){
     cd "${SCRIPT_DIR}"
 }
 
-#clean_up
+clean_up
 install_requirements
 export_common_build_env
 export_custom_build_env
