@@ -53,19 +53,19 @@ export_common_build_env() {
     cd "${SCRIPT_DIR}/kernel-5.15"
 
     # cook build config
-    python scripts/gen_build_config.py \
-        --kernel-defconfig a16xm_00_defconfig \
-        --kernel-defconfig-overlays "entry_level.config S98901AA1.config S98901AA1_debug.config" \
-        -m user -o ../out/target/product/a16xm/obj/KERNEL_OBJ/build.config &>/dev/null
+    python3 scripts/gen_build_config.py \
+        --kernel-defconfig a25ex_00_defconfig \
+        --kernel-defconfig-overlays "entry_level.config" \
+        -m user -o ../out/target/product/a25ex/obj/KERNEL_OBJ/build.config &>/dev/null
 
     # common exports from samsung's build_kernel.sh
     export ARCH=arm64
     export PLATFORM_VERSION=13
     export CROSS_COMPILE="aarch64-linux-gnu-"
     export CROSS_COMPILE_COMPAT="arm-linux-gnueabi-"
-    export OUT_DIR="../out/target/product/a16xm/obj/KERNEL_OBJ"
-    export DIST_DIR="../out/target/product/a16xm/obj/KERNEL_OBJ"
-    export BUILD_CONFIG="../out/target/product/a16xm/obj/KERNEL_OBJ/build.config"
+    export OUT_DIR="../out/target/product/a25ex/obj/KERNEL_OBJ"
+    export DIST_DIR="../out/target/product/a25ex/obj/KERNEL_OBJ"
+    export BUILD_CONFIG="../out/target/product/a25ex/obj/KERNEL_OBJ/build.config"
 
     cd "${SCRIPT_DIR}"
 
@@ -125,8 +125,8 @@ build_gki_kernel(){
     cd "${SCRIPT_DIR}/kernel"
 
     env "${GKI_KERNEL_BUILD_OPTIONS[@]}" ./build/build.sh && \
-        cp "${SCRIPT_DIR}/out/target/product/a16xm/obj/KERNEL_OBJ/kernel-5.15/arch/arm64/boot/Image"* \
-           "${SCRIPT_DIR}/out/target/product/a16xm/obj/KERNEL_OBJ/dist/boot.img" \
+        cp "${SCRIPT_DIR}/out/target/product/a25ex/obj/KERNEL_OBJ/kernel-5.15/arch/arm64/boot/Image"* \
+           "${SCRIPT_DIR}/out/target/product/a25ex/obj/KERNEL_OBJ/dist/boot.img" \
            "${SCRIPT_DIR}/dist"
 
     local exit_code=$?
