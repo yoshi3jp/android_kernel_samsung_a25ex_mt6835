@@ -19,6 +19,8 @@
  *
  */
 
+#include <linux/dma-buf.h>
+
 #include <mali_kbase.h>
 #include "mali_kbase_config_defaults.h"
 #include <mali_kbase_ctx_sched.h>
@@ -32,6 +34,7 @@
 #include <uapi/gpu/arm/midgard/mali_base_kernel.h>
 #include <mali_kbase_hwaccess_time.h>
 #include "mali_kbase_csf_tiler_heap.h"
+#include <mali_kbase_trace_gpu_mem.h>
 #include "mali_kbase_csf_mcu_shared_reg.h"
 
 #if IS_ENABLED(CONFIG_MALI_MTK_DEBUG) || IS_ENABLED(CONFIG_MALI_MTK_ACP_DSU_REQ)
@@ -125,6 +128,7 @@ static int suspend_active_queue_groups(struct kbase_device *kbdev,
 static int suspend_active_groups_on_powerdown(struct kbase_device *kbdev,
 					      bool system_suspend);
 static void schedule_in_cycle(struct kbase_queue_group *group, bool force);
+static void scheduler_apply_pmode_exit_wa(struct kbase_device *kbdev);
 
 #define kctx_as_enabled(kctx) (!kbase_ctx_flag(kctx, KCTX_AS_DISABLED_ON_FAULT))
 
@@ -844,6 +848,8 @@ static void scheduler_pm_idle(struct kbase_device *kbdev)
 
 	lockdep_assert_held(&kbdev->csf.scheduler.lock);
 
+	scheduler_apply_pmode_exit_wa(kbdev);
+
 	spin_lock_irqsave(&kbdev->hwaccess_lock, flags);
 	prev_count = kbdev->csf.scheduler.pm_active_count;
 	if (!WARN_ON(prev_count == 0))
@@ -879,6 +885,8 @@ static void scheduler_pm_idle_before_sleep(struct kbase_device *kbdev)
 	u32 prev_count;
 
 	lockdep_assert_held(&kbdev->csf.scheduler.lock);
+
+	scheduler_apply_pmode_exit_wa(kbdev);
 
 	spin_lock_irqsave(&kbdev->hwaccess_lock, flags);
 	prev_count = kbdev->csf.scheduler.pm_active_count;
@@ -981,8 +989,6 @@ static void scheduler_suspend(struct kbase_device *kbdev)
 	struct kbase_csf_scheduler *const scheduler = &kbdev->csf.scheduler;
 
 	lockdep_assert_held(&scheduler->lock);
-
-	scheduler_apply_pmode_exit_wa(kbdev);
 
 	if (!WARN_ON(scheduler->state == SCHED_SUSPENDED)) {
 		dev_vdbg(kbdev->dev, "Suspending the Scheduler");
@@ -2870,6 +2876,7 @@ static void program_csg_slot(struct kbase_queue_group *group, s8 slot,
 	kbase_csf_firmware_csg_input(ginfo, CSG_PROTM_SUSPEND_BUF_LO, protm_suspend_buf & U32_MAX);
 	kbase_csf_firmware_csg_input(ginfo, CSG_PROTM_SUSPEND_BUF_HI, protm_suspend_buf >> 32);
 
+
 	/* Enable all interrupts for now */
 	kbase_csf_firmware_csg_input(ginfo, CSG_ACK_IRQ_MASK, ~((u32)0));
 
@@ -4138,7 +4145,7 @@ static void scheduler_group_check_protm_enter(struct kbase_device *const kbdev,
 	bool protm_in_use;
 #if IS_ENABLED(CONFIG_MALI_MTK_ACP_SVP_WA)
 	int r_index, ret, i;
-	struct kbase_context *kctx;
+	struct kbase_context *kctx = input_grp->kctx;
 	struct kbase_va_region *reg;
 	dma_addr_t sync_dma_addr;
 	struct page *sync_page;
@@ -4152,7 +4159,7 @@ static void scheduler_group_check_protm_enter(struct kbase_device *const kbdev,
 	 * entry to protected mode happens with a memory region being locked and
 	 * the same region is then accessed by the GPU in protected mode.
 	 */
-	mutex_lock(&kbdev->mmu_hw_mutex);
+	down_write(&kbdev->csf.pmode_sync_sem);
 	spin_lock_irqsave(&scheduler->interrupt_lock, flags);
 
 	/* Check if the previous transition to enter & exit the protected
@@ -4207,41 +4214,39 @@ static void scheduler_group_check_protm_enter(struct kbase_device *const kbdev,
 					scheduler->apply_pmode_exit_wa = false;
 				} else {
 					spin_unlock_irqrestore(&scheduler->interrupt_lock, flags);
+					up_write(&kbdev->csf.pmode_sync_sem);
 					kbase_pm_apply_pmode_entry_wa(kbdev);
+					down_write(&kbdev->csf.pmode_sync_sem);
 					spin_lock_irqsave(&scheduler->interrupt_lock, flags);
 				}
 
 #if IS_ENABLED(CONFIG_MALI_MTK_ACP_SVP_WA)
 				if (kbdev->system_coherency != COHERENCY_NONE) {
 					spin_unlock_irqrestore(&scheduler->interrupt_lock, flags);
-					mutex_lock(&kbdev->kctx_list_lock);
-					// loop for each kctx
-					list_for_each_entry(kctx, &kbdev->kctx_list, kctx_list_link) {
-						dev_vdbg(kbdev->dev, "kctx %p, pid %d,tid %d, coherent_regioon_nr: %u\n",
-							kctx, kctx->pid, kctx->tgid, kctx->coherent_region_nr);
-						if (kctx->pid == input_grp->kctx->pid) {
-							mutex_lock(&kctx->coherenct_region_lock);
-							// for each region in the kctx
-							for (r_index = 0; r_index < kctx->coherent_region_nr; r_index++) {
-								if (kctx->coherenct_regions[r_index] != NULL &&
-									(kctx->coherenct_regions[r_index])->cpu_alloc != NULL) {
-									reg = kctx->coherenct_regions[r_index];
-									//flush region page by page
-									for (i = 0 ; i < reg->gpu_alloc->nents; i++)
-									{
-										sync_pa = as_phys_addr_t(reg->gpu_alloc->pages[i]);
-										sync_page = pfn_to_page(PFN_DOWN(sync_pa));
-										sync_dma_addr = kbase_dma_addr(sync_page);
-										dma_sync_single_for_device(kbdev->dev,
-											sync_dma_addr, PAGE_SIZE, DMA_BIDIRECTIONAL);
-									}
+					dev_vdbg(kbdev->dev, "kctx %p, pid %d,tid %d, coherent_regioon_nr: %u\n",
+						kctx, kctx->pid, kctx->tgid, kctx->coherent_region_nr);
+
+					kbase_gpu_vm_lock(kctx);
+					mutex_lock(&kctx->coherenct_region_lock);
+					for (r_index = 0; r_index < kctx->coherent_region_nr; r_index++) {
+						if (kctx->coherenct_regions[r_index] != NULL &&
+							(kctx->coherenct_regions[r_index])->cpu_alloc != NULL) {
+								reg = kctx->coherenct_regions[r_index];
+								//flush region page by page
+								for (i = 0 ; i < reg->gpu_alloc->nents; i++)
+								{
+									sync_pa = as_phys_addr_t(reg->gpu_alloc->pages[i]);
+									sync_page = pfn_to_page(PFN_DOWN(sync_pa));
+									sync_dma_addr = kbase_dma_addr(sync_page);
+									dma_sync_single_for_device(kbdev->dev,
+									sync_dma_addr, PAGE_SIZE, DMA_BIDIRECTIONAL);
 								}
 							}
-						mutex_unlock(&kctx->coherenct_region_lock);
-						dev_vdbg(kbdev->dev, "Flushed kctx pid: %d, tgid: %d\n", kctx->pid, kctx->tgid);
 						}
-					}
-					mutex_unlock(&kbdev->kctx_list_lock);
+					mutex_unlock(&kctx->coherenct_region_lock);
+					kbase_gpu_vm_unlock(kctx);
+					dev_vdbg(kbdev->dev, "Flushed kctx pid: %d, tgid: %d\n", kctx->pid, kctx->tgid);
+
 					spin_lock_irqsave(&scheduler->interrupt_lock, flags);
 				}
 #endif
@@ -4254,11 +4259,13 @@ static void scheduler_group_check_protm_enter(struct kbase_device *const kbdev,
 				kbase_csf_enter_protected_mode(kbdev);
 				/* Set the pending protm seq number to the next one */
 				protm_enter_set_next_pending_seq(kbdev);
+				kbase_csf_scheduler_append_protm_flag(kbdev,
+								      CSF_SCHED_PROTM_EVENT_ENTER);
 
 				spin_unlock_irqrestore(&scheduler->interrupt_lock, flags);
 
 				kbase_csf_wait_protected_mode_enter(kbdev);
-				mutex_unlock(&kbdev->mmu_hw_mutex);
+				up_write(&kbdev->csf.pmode_sync_sem);
 
 				scheduler->protm_enter_time = ktime_get_raw();
 
@@ -4268,7 +4275,7 @@ static void scheduler_group_check_protm_enter(struct kbase_device *const kbdev,
 	}
 
 	spin_unlock_irqrestore(&scheduler->interrupt_lock, flags);
-	mutex_unlock(&kbdev->mmu_hw_mutex);
+	up_write(&kbdev->csf.pmode_sync_sem);
 }
 
 /**
@@ -4936,6 +4943,13 @@ static bool scheduler_idle_suspendable(struct kbase_device *kbdev)
 
 	spin_lock_irqsave(&kbdev->hwaccess_lock, flags);
 	spin_lock(&scheduler->interrupt_lock);
+
+	if (kbase_csf_scheduler_protected_mode_in_use(kbdev)) {
+		dev_info(kbdev->dev, "GPU suspension skipped due to protected mode");
+		spin_unlock(&scheduler->interrupt_lock);
+		spin_unlock_irqrestore(&kbdev->hwaccess_lock, flags);
+		return false;
+	}
 
 	if (scheduler->fast_gpu_idle_handling) {
 		scheduler->fast_gpu_idle_handling = false;
@@ -5908,6 +5922,11 @@ static void scheduler_inner_reset(struct kbase_device *kbdev)
 
 	mutex_lock(&scheduler->lock);
 
+	/* The GPU reset would result in implicit power down. So need to switch back to
+	 * to MTK PDCA before the reset.
+	 */
+	scheduler_apply_pmode_exit_wa(kbdev);
+
 	spin_lock_irqsave(&scheduler->interrupt_lock, flags);
 	bitmap_fill(scheduler->csgs_events_enable_mask, MAX_SUPPORTED_CSGS);
 	if (scheduler->active_protm_grp) {
@@ -6638,6 +6657,436 @@ void kbase_csf_scheduler_context_term(struct kbase_context *kctx)
 	kbase_csf_event_wait_remove(kctx, check_group_sync_update_cb, kctx);
 	cancel_work_sync(&kctx->csf.sched.sync_update_work);
 	destroy_workqueue(kctx->csf.sched.sync_update_wq);
+
+	kbase_ctx_sched_remove_ctx(kctx);
+}
+
+static void scheduler_protm_free_imported_buf_alloc_helper(struct kbase_mem_phy_alloc *alloc)
+{
+	switch (alloc->type) {
+	case KBASE_MEM_TYPE_IMPORTED_UMM:
+		dma_buf_detach(alloc->imported.umm.dma_buf, alloc->imported.umm.dma_attachment);
+		dma_buf_put(alloc->imported.umm.dma_buf);
+		break;
+	case KBASE_MEM_TYPE_IMPORTED_USER_BUF:
+		switch (alloc->imported.user_buf.state) {
+		case KBASE_USER_BUF_STATE_PINNED:
+		case KBASE_USER_BUF_STATE_DMA_MAPPED:
+		case KBASE_USER_BUF_STATE_GPU_MAPPED: {
+			/* It's too late to undo all of the operations that might have
+			 * been done on an imported USER_BUFFER handle, as references
+			 * have been lost already.
+			 *
+			 * The only thing that can be done safely and that is crucial for
+			 * the rest of the system is releasing the physical pages that
+			 * have been pinned and that are still referenced by the physical
+			 * allocation.
+			 */
+			kbase_user_buf_unpin_pages(alloc);
+			alloc->imported.user_buf.state = KBASE_USER_BUF_STATE_EMPTY;
+			break;
+		}
+		case KBASE_USER_BUF_STATE_EMPTY: {
+			/* Nothing to do. */
+			break;
+		}
+		default: {
+			WARN(1, "Unexpected free of type %d state %d\n", alloc->type,
+			     alloc->imported.user_buf.state);
+			break;
+		}
+		}
+
+		if (alloc->imported.user_buf.mm)
+			mmdrop(alloc->imported.user_buf.mm);
+		if (alloc->properties & KBASE_MEM_PHY_ALLOC_LARGE)
+			vfree(alloc->imported.user_buf.pages);
+		else
+			kfree(alloc->imported.user_buf.pages);
+		break;
+	default:
+		WARN(1, "Unexpected free of type %d\n", alloc->type);
+		break;
+	}
+
+	/* Free based on allocation type */
+	if (alloc->properties & KBASE_MEM_PHY_ALLOC_LARGE)
+		vfree(alloc);
+	else
+		kfree(alloc);
+}
+
+static void kbase_csf_scheduler_protm_free_deferred_imported_bufs(struct kbase_device *kbdev)
+{
+	struct kbase_csf_protm_mem_pages_defer_ctrl *pages_defer_ctrl =
+		&kbdev->csf.scheduler.pages_defer_ctrl;
+	const int defer_seq = pages_defer_ctrl->imported_bufs.defer_seq;
+	struct list_head free_pending;
+#ifndef MALI_STRIP_KBASE_DEVELOPMENT
+	unsigned int alloc_cnt = 0;
+#endif
+
+	lockdep_assert_held(&pages_defer_ctrl->mem_pools_op_lock);
+
+	/* If an empty list, or sequence not yet completed, nothing to do */
+	if (list_empty(&pages_defer_ctrl->imported_bufs.allocs_to_free) ||
+	    !is_csf_scheduler_protm_seq_completed(kbdev, defer_seq))
+		return;
+
+	/* Move existing imported_bufs.allocs_to_free to free_pending list.
+	 * This allows the 'imported_bufs.allocs_to_free' to take in new items when
+	 * the lock is dropped for the actual alloc free operation duration.
+	 */
+	INIT_LIST_HEAD(&free_pending);
+	list_splice_init(&pages_defer_ctrl->imported_bufs.allocs_to_free, &free_pending);
+	spin_unlock(&pages_defer_ctrl->mem_pools_op_lock);
+	while (!list_empty(&free_pending)) {
+		struct kbase_mem_phy_alloc *alloc =
+			list_first_entry(&free_pending, struct kbase_mem_phy_alloc, delegate_hook);
+
+#ifndef MALI_STRIP_KBASE_DEVELOPMENT
+		if (alloc_cnt++ == 0)
+			dev_info(kbdev->dev,
+				 "Free first imported buf-alloc: type=%d, defer_seq=%d\n",
+				 alloc->type, defer_seq);
+#endif
+		list_del_init(&alloc->delegate_hook);
+		scheduler_protm_free_imported_buf_alloc_helper(alloc);
+	}
+	spin_lock(&pages_defer_ctrl->mem_pools_op_lock);
+#ifndef MALI_STRIP_KBASE_DEVELOPMENT
+	dev_info(kbdev->dev, "%s released %u imported buf-alloc, defer_seq=%d\n", __func__,
+		 alloc_cnt, defer_seq);
+#endif
+}
+
+static void kbase_csf_scheduler_protm_pages_defer_work_op(struct kbase_device *kbdev)
+{
+	struct kbase_csf_protm_mem_pages_defer_ctrl *pages_defer_ctrl =
+		&kbdev->csf.scheduler.pages_defer_ctrl;
+	struct kbase_mem_pool *mem_pool;
+
+	spin_lock(&pages_defer_ctrl->mem_pools_op_lock);
+	/* Free existing imported buf allocs first */
+	kbase_csf_scheduler_protm_free_deferred_imported_bufs(kbdev);
+
+	/* Move the parked pools to the op_pending_list */
+	list_splice_init(&pages_defer_ctrl->mem_pools_list, &pages_defer_ctrl->op_pending_list);
+	while (!list_empty(&pages_defer_ctrl->op_pending_list)) {
+		mem_pool = list_first_entry(&pages_defer_ctrl->op_pending_list,
+					    struct kbase_mem_pool, link_to_ctrl);
+
+		if (is_csf_scheduler_protm_seq_completed(kbdev,
+							 atomic_read(&mem_pool->defer_seq))) {
+			/* op_inflight_list is transitional, has at most a single item */
+			list_move(&mem_pool->link_to_ctrl, &pages_defer_ctrl->op_inflight_list);
+
+			/* Drop the lock and proceed to release pages for the in-flight item. Note,
+			 * the in-flight pool may still be attached to pages_defer_ctrl afterwards,
+			 * in which case the pool needs to be attached to the parked list, pending
+			 * for the next pmode end event, which will trigger the next release action.
+			 * Had the release of pages successfully completed in the first place, the
+			 * pool would have been removed from the pages_defer_ctrl lists on return.
+			 */
+			spin_unlock(&pages_defer_ctrl->mem_pools_op_lock);
+			kbase_mem_pool_free_pages_from_deferred_list(mem_pool, true);
+			spin_lock(&pages_defer_ctrl->mem_pools_op_lock);
+
+			if (pages_defer_ctrl->drop_op_pool) {
+				/* A delegated removal is requested during the above call, where
+				 * the guarding lock had been released.
+				 */
+				if (!list_empty(&mem_pool->link_to_ctrl))
+					list_del_init(&mem_pool->link_to_ctrl);
+				pages_defer_ctrl->drop_op_pool = NULL;
+				wake_up_all(&pages_defer_ctrl->drop_op_pool_wait);
+			}
+
+			/* If the single in-flight pool not dropped, put back to the parked list */
+			if (!list_empty(&pages_defer_ctrl->op_inflight_list))
+				list_splice_init(&pages_defer_ctrl->op_inflight_list,
+						 &pages_defer_ctrl->mem_pools_list);
+		} else
+			list_move(&mem_pool->link_to_ctrl, &pages_defer_ctrl->mem_pools_list);
+	}
+	spin_unlock(&pages_defer_ctrl->mem_pools_op_lock);
+}
+
+static void kbase_csf_scheduler_protm_pages_defer_worker(struct work_struct *data)
+{
+	struct kbase_device *kbdev = container_of(data, struct kbase_device,
+						  csf.scheduler.pages_defer_ctrl.mem_pools_op_work);
+
+	dev_dbg(kbdev->dev, "Worker started for protm event completion sequence number: %d",
+		kbase_csf_scheduler_get_protm_seq_num(kbdev));
+
+	kbase_csf_scheduler_protm_pages_defer_work_op(kbdev);
+}
+
+/* Bit pattern flags for checking status of lists in pages_defer_ctrl */
+#define PARKED_LIST_NOT_EMPTY_BIT_FLAG (1 << 0)
+#define PENDING_LIST_NOT_EMPTY_BIT_FLAG (1 << 1)
+#define INFLIGHT_LIST_NOT_EMPTY_BIT_FLAG (1 << 2)
+#define IMPORTED_BUF_LIST_NOT_EMPTY_BIT_FLAG (1 << 3)
+static int kbase_csf_scheduler_protm_pages_defer_has_pools(struct kbase_device *kbdev)
+{
+	struct kbase_csf_protm_mem_pages_defer_ctrl *pages_defer_ctrl =
+		&kbdev->csf.scheduler.pages_defer_ctrl;
+	int pattern = 0;
+
+	spin_lock(&pages_defer_ctrl->mem_pools_op_lock);
+	if (!list_empty(&pages_defer_ctrl->mem_pools_list))
+		pattern |= PARKED_LIST_NOT_EMPTY_BIT_FLAG;
+	if (!list_empty(&pages_defer_ctrl->op_pending_list))
+		pattern |= PENDING_LIST_NOT_EMPTY_BIT_FLAG;
+	if (!list_empty(&pages_defer_ctrl->op_inflight_list))
+		pattern |= INFLIGHT_LIST_NOT_EMPTY_BIT_FLAG;
+	if (!list_empty(&pages_defer_ctrl->imported_bufs.allocs_to_free))
+		pattern |= IMPORTED_BUF_LIST_NOT_EMPTY_BIT_FLAG;
+	spin_unlock(&pages_defer_ctrl->mem_pools_op_lock);
+
+	return pattern;
+}
+
+static void kbase_csf_scheduler_pages_defer_ctrl_term(struct kbase_device *kbdev)
+{
+	struct kbase_csf_protm_mem_pages_defer_ctrl *pages_defer_ctrl =
+		&kbdev->csf.scheduler.pages_defer_ctrl;
+
+	WARN_ONCE(atomic_read(&pages_defer_ctrl->protm_event_id) & CSF_SCHED_PROTM_EVENT_FLAGS_MASK,
+		  "Protm_event_id has pending active flags!, event_id: 0x%x",
+		  atomic_read(&pages_defer_ctrl->protm_event_id));
+
+	/* Dealing with any deferred pools first, before one shuts down the workqueue */
+	if (pages_defer_ctrl->do_defer) {
+		int pattern = kbase_csf_scheduler_protm_pages_defer_has_pools(kbdev);
+
+		WARN_ONCE(pattern, "pages_defer_ctrl lists not all-empty, pattern: 0x%x\n",
+			  pattern);
+
+		if (pattern) {
+			unsigned long flags = 0;
+
+			kbase_csf_scheduler_spin_lock(kbdev, &flags);
+			/* Closing down, mock completion to release pools */
+			kbase_csf_scheduler_complete_protm_event(kbdev);
+			kbase_csf_scheduler_spin_unlock(kbdev, flags);
+			kbase_csf_scheduler_protm_pages_defer_work_op(kbdev);
+		}
+	}
+
+	if (pages_defer_ctrl->mem_pools_op_workq) {
+		flush_workqueue(pages_defer_ctrl->mem_pools_op_workq);
+		destroy_workqueue(pages_defer_ctrl->mem_pools_op_workq);
+		pages_defer_ctrl->mem_pools_op_workq = NULL;
+	}
+}
+
+static int kbase_csf_scheduler_pages_defer_ctrl_init(struct kbase_device *kbdev)
+{
+	struct kbase_csf_scheduler *scheduler = &kbdev->csf.scheduler;
+	struct kbase_csf_protm_mem_pages_defer_ctrl *pages_defer_ctrl =
+		&scheduler->pages_defer_ctrl;
+
+	pages_defer_ctrl->do_defer = true;
+	spin_lock_init(&pages_defer_ctrl->mem_pools_op_lock);
+	atomic_set(&pages_defer_ctrl->protm_event_id, 0);
+	INIT_LIST_HEAD(&pages_defer_ctrl->mem_pools_list);
+	INIT_LIST_HEAD(&pages_defer_ctrl->op_inflight_list);
+	INIT_LIST_HEAD(&pages_defer_ctrl->op_pending_list);
+	INIT_WORK(&pages_defer_ctrl->mem_pools_op_work,
+		  kbase_csf_scheduler_protm_pages_defer_worker);
+	init_waitqueue_head(&pages_defer_ctrl->pools_term_wq);
+	pages_defer_ctrl->drop_op_pool = NULL;
+	init_waitqueue_head(&pages_defer_ctrl->drop_op_pool_wait);
+	INIT_LIST_HEAD(&pages_defer_ctrl->imported_bufs.allocs_to_free);
+	pages_defer_ctrl->imported_bufs.defer_seq = 0;
+
+	pages_defer_ctrl->mem_pools_op_workq =
+		alloc_ordered_workqueue("sched_deferred_pages_wq", WQ_MEM_RECLAIM);
+	if (pages_defer_ctrl->mem_pools_op_workq == NULL)
+		return -ENOMEM;
+
+	return 0;
+}
+
+bool kbase_csf_scheduler_delegate_imported_buf_alloc_free(struct kbase_mem_phy_alloc *alloc)
+{
+	struct kbase_device *kbdev = NULL;
+	struct kbase_csf_protm_mem_pages_defer_ctrl *pages_defer_ctrl;
+	const bool hook_inited = list_empty(&alloc->delegate_hook);
+
+	/* Extract the kbdev from the imported buf field. Presently, only UMM and
+	 * user-buf may require delegation. For other types, returning false.
+	 */
+	if (alloc->type == KBASE_MEM_TYPE_IMPORTED_UMM)
+		kbdev = alloc->imported.umm.kctx->kbdev;
+	else if (alloc->type == KBASE_MEM_TYPE_IMPORTED_USER_BUF)
+		kbdev = alloc->imported.user_buf.kbdev;
+	else
+		return false;
+
+	/* It's a coding error if kbdev is not available */
+	if (WARN_ON(!kbdev))
+		return false;
+
+	/* If the hook is not in clean state, warn for coding error */
+	if (WARN_ON(!hook_inited))
+		return false;
+
+	/* Not in active pmode session, no need to delegate */
+	if (!kbase_mem_is_pmode_deferral_required(kbdev))
+		return false;
+
+	/* Delegation required */
+	pages_defer_ctrl = &kbdev->csf.scheduler.pages_defer_ctrl;
+	spin_lock(&pages_defer_ctrl->mem_pools_op_lock);
+
+	/* If existing list already completed the deferral, release them */
+	if (!list_empty(&pages_defer_ctrl->imported_bufs.allocs_to_free) &&
+	    is_csf_scheduler_protm_seq_completed(kbdev, pages_defer_ctrl->imported_bufs.defer_seq))
+		kbase_csf_scheduler_protm_free_deferred_imported_bufs(kbdev);
+
+	list_add(&alloc->delegate_hook, &pages_defer_ctrl->imported_bufs.allocs_to_free);
+	/* The pmode sequence number is conceptually monotonic, record the active pmode seq_nr */
+	pages_defer_ctrl->imported_bufs.defer_seq = kbase_csf_scheduler_get_protm_seq_num(kbdev);
+
+	spin_unlock(&pages_defer_ctrl->mem_pools_op_lock);
+
+	return true;
+}
+
+/**
+ * kbase_csf_scheduler_pages_defer_ctrl_add_pool() - add pool to scheduler pool defer list
+ *
+ * @pool: Pointer to the memory pool.
+ *
+ * This function adds the given pool to scheduler.pages_defer_ctrl list for handling
+ * the deferred pages. If pool already on list (i.e. it's already added before), do
+ * nothing.
+ *
+ * Note, the caller must own the pool by locking on its mutex lock.
+ */
+void kbase_csf_scheduler_pages_defer_ctrl_add_pool(struct kbase_mem_pool *pool)
+{
+	struct kbase_csf_protm_mem_pages_defer_ctrl *pages_defer_ctrl =
+		&pool->kbdev->csf.scheduler.pages_defer_ctrl;
+
+	/* The caller must hold the pool's mutex lock */
+	lockdep_assert_held(&pool->pool_lock);
+
+	if (pool->dying)
+		return;
+
+	spin_lock(&pages_defer_ctrl->mem_pools_op_lock);
+	if (list_empty(&pool->link_to_ctrl))
+		list_add(&pool->link_to_ctrl, &pages_defer_ctrl->mem_pools_list);
+	spin_unlock(&pages_defer_ctrl->mem_pools_op_lock);
+}
+
+/* Return true on the delegated pool-removal is done, otherwise timed out */
+static bool wait_delegated_pool_removal_done(struct kbase_mem_pool *pool)
+{
+	struct kbase_csf_protm_mem_pages_defer_ctrl *pages_defer_ctrl =
+		&pool->kbdev->csf.scheduler.pages_defer_ctrl;
+	unsigned int time_out_ms =
+		kbase_get_timeout_ms(pool->kbdev, CSF_SCHED_PROTM_PROGRESS_TIMEOUT);
+	long remaining = (long)msecs_to_jiffies(time_out_ms);
+
+	/* Wait for an event that signals the delegated task is done, return boolean result */
+	return wait_event_timeout(pages_defer_ctrl->drop_op_pool_wait,
+				  READ_ONCE(pages_defer_ctrl->drop_op_pool) != pool, remaining);
+}
+
+/**
+ * kbase_csf_scheduler_pages_defer_ctrl_drop_pool() - Remove pool from pages_defer_ctrl lists
+ *
+ * @pool: Pointer to the memory pool.
+ * @from_defer_ctrl: Indicating the caller is defer_controller.
+ *
+ * During operation a pool with deferred pages can be on one of the scheduler-owned
+ * pages_defer_ctrl lists. This function removes the given pool from the managed lists.
+ *
+ * Note, the caller must own the pool by locking on its lock.
+ */
+void kbase_csf_scheduler_pages_defer_ctrl_drop_pool(struct kbase_mem_pool *pool,
+						    bool from_defer_ctrl)
+{
+	struct kbase_mem_pool *mem_pool, *tmp;
+	bool pool_on_defer_ctrl = false;
+	struct kbase_csf_protm_mem_pages_defer_ctrl *pages_defer_ctrl =
+		&pool->kbdev->csf.scheduler.pages_defer_ctrl;
+
+	/* The caller must hold the pool's lock */
+	lockdep_assert_held(&pool->pool_lock);
+
+	/* Not referenced by the pages_defer_ctrl, nothing to do */
+	if (list_empty(&pool->link_to_ctrl))
+		return;
+
+	spin_lock(&pages_defer_ctrl->mem_pools_op_lock);
+
+	/* Check in-flight list. By design it can at most has a single item during ops */
+	if (&pool->link_to_ctrl == pages_defer_ctrl->op_inflight_list.next) {
+		if (!from_defer_ctrl) {
+			bool removed;
+
+			/* Delegate the removal to the control side for coordinated actions. */
+			pages_defer_ctrl->drop_op_pool = pool;
+			spin_unlock(&pages_defer_ctrl->mem_pools_op_lock);
+			kbase_mem_pool_unlock(pool);
+
+			removed = wait_delegated_pool_removal_done(pool);
+
+			kbase_mem_pool_lock(pool);
+			spin_lock(&pages_defer_ctrl->mem_pools_op_lock);
+
+			if (!removed) {
+				/* timed-out, clean it up */
+				if (pages_defer_ctrl->drop_op_pool == pool)
+					pages_defer_ctrl->drop_op_pool = NULL;
+				dev_err(pool->kbdev->dev, "mem_pool-%pK delegated removal timeout",
+					pool);
+			}
+			/* Force a removal to offer a graceful recovery */
+			if (WARN_ON(!list_empty(&pool->link_to_ctrl)))
+				list_del_init(&pool->link_to_ctrl);
+		} else
+			list_del_init(&pool->link_to_ctrl);
+	}
+
+	if (list_empty(&pool->link_to_ctrl)) {
+		/* The item was in-flight and already removed, return */
+		spin_unlock(&pages_defer_ctrl->mem_pools_op_lock);
+		return;
+	}
+
+	/* Not empty, Check the op_pending_list */
+	list_for_each_entry_safe(mem_pool, tmp, &pages_defer_ctrl->op_pending_list, link_to_ctrl)
+		if (mem_pool == pool) {
+			list_del_init(&pool->link_to_ctrl);
+			break;
+		}
+
+	/* Check the page-defer park-list of memory pools */
+	if (!list_empty(&pool->link_to_ctrl)) {
+		list_for_each_entry_safe(mem_pool, tmp, &pages_defer_ctrl->mem_pools_list,
+					 link_to_ctrl)
+			if (mem_pool == pool) {
+				list_del_init(&pool->link_to_ctrl);
+				break;
+			}
+	}
+
+	/* Sanity check: it's a programming error the pool is not on the above lists */
+	pool_on_defer_ctrl = list_empty(&pool->link_to_ctrl);
+	if (!pool_on_defer_ctrl) {
+		/* Unexpected programming error, remove the pool from a its linked list */
+		list_del_init(&pool->link_to_ctrl);
+		dev_err(pool->kbdev->dev, "mem_pool-%pK is not on any of the assumed lists", pool);
+	}
+
+	spin_unlock(&pages_defer_ctrl->mem_pools_op_lock);
 }
 
 int kbase_csf_scheduler_init(struct kbase_device *kbdev)
@@ -6656,10 +7105,13 @@ int kbase_csf_scheduler_init(struct kbase_device *kbdev)
 		return -ENOMEM;
 	}
 
-	err = kbase_csf_mcu_shared_regs_data_init(kbdev);
-	if (err) {
-		dev_err(kbdev->dev, "Failed to initialize MCU shared region data");
-		kfree(scheduler->csg_slots);
+	err = kbase_csf_scheduler_pages_defer_ctrl_init(kbdev);
+	if (!err) {
+		err = kbase_csf_mcu_shared_regs_data_init(kbdev);
+		if (err) {
+			dev_err(kbdev->dev, "Failed to initialize MCU shared region data");
+			kbase_csf_scheduler_pages_defer_ctrl_term(kbdev);
+		}
 	}
 
 	return err;
@@ -6783,6 +7235,7 @@ void kbase_csf_scheduler_term(struct kbase_device *kbdev)
 	 * have been released.
 	 */
 	kbase_csf_mcu_shared_regs_data_term(kbdev);
+	kbase_csf_scheduler_pages_defer_ctrl_term(kbdev);
 }
 
 void kbase_csf_scheduler_early_term(struct kbase_device *kbdev)
