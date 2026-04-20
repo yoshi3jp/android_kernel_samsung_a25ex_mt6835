@@ -269,7 +269,7 @@ static int wait_l2_power_trans_complete(struct kbase_device *kbdev)
 #if !IS_ENABLED(CONFIG_MALI_NO_MALI)
 static int wait_cores_power_trans_complete(struct kbase_device *kbdev)
 {
-#define WAIT_TIMEOUT 50000 /* 1ms timeout */
+#define WAIT_TIMEOUT 50000 /* 50ms timeout */
 #define DELAY_TIME_IN_US 1
 	const int max_iterations = WAIT_TIMEOUT;
 	int loop;
