@@ -1,4 +1,4 @@
-name: KernelSU · SM-A166P One UI 6
+name: KernelSU · SM-A253Z One UI 8
 
 on:
   workflow_dispatch:
@@ -13,11 +13,11 @@ permissions:
 
 jobs:
   build:
-    name: Build KernelSU — A166PXXS4AYC1
+    name: Build KernelSU — A253ZSCS1BZA2
     runs-on: ubuntu-latest
 
     env:
-      ARTIFACT_BASE: "KernelSU-SM-A166P-OneUI6-A166PXXS4AYC1"
+      ARTIFACT_BASE: "KernelSU-SM-A253Z-OneUI8-A253ZSCS1BZA2"
 
     steps:
       - name: Checkout source
@@ -73,15 +73,15 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.tag.outputs.tag }}
-          name: "KernelSU · SM-A166P · One UI 6 · A166PXXS4AYC1 [${{ steps.tag.outputs.tag }}]"
+          name: "KernelSU · SM-A253Z · One UI 8 · A253ZSCS1BZA2 [${{ steps.tag.outputs.tag }}]"
           body: |
-            ## KernelSU Kernel — SM-A166P
+            ## KernelSU Kernel — SM-A253Z
 
             | Field     | Value                         |
             |-----------|-------------------------------|
-            | Device    | Samsung Galaxy A16 (SM-A166P) |
-            | Firmware  | A166PXXS4AYC1                 |
-            | One UI    | 6 (Android 14)                |
+            | Device    | Samsung Galaxy A25 5G(SM-A253)|
+            | Firmware  | A253ZSCS1BZA2                 |
+            | One UI    | 8 (Android 16)                |
             | Kernel    | 5.15                          |
             | Build tag | `${{ steps.tag.outputs.tag }}` |
             | Version   | `${{ github.event.inputs.kernel_version || 'dev' }}` |
