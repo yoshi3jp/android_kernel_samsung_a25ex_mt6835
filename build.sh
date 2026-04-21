@@ -46,7 +46,7 @@ if [ -z "$BUILD_KERNEL_VERSION" ]; then
     export BUILD_KERNEL_VERSION="dev"
 fi
 
-echo -e "CONFIG_LOCALVERSION_AUTO=n\nCONFIG_LOCALVERSION=\"-ravindu644-${BUILD_KERNEL_VERSION}\"\n" > "${SCRIPT_DIR}/custom_defconfigs/version_defconfig"
+echo -e "CONFIG_LOCALVERSION_AUTO=n\nCONFIG_LOCALVERSION=\"-yoshi3jp-${BUILD_KERNEL_VERSION}\"\n" > "${SCRIPT_DIR}/custom_defconfigs/version_defconfig"
 
 export_common_build_env() {
 
