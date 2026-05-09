@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note
 /*
  *
- * (C) COPYRIGHT 2010-2021 ARM Limited. All rights reserved.
+ * (C) COPYRIGHT 2010-2023 ARM Limited. All rights reserved.
  *
  * This program is free software and is provided to you under the terms of the
  * GNU General Public License version 2 as published by the Free Software
@@ -53,17 +53,17 @@ static void kbase_gpu_gwt_setup_pages(struct kbase_context *kctx,
 					unsigned long flag)
 {
 	kbase_gpu_gwt_setup_page_permission(kctx, flag,
-				rb_first(&(kctx->reg_rbtree_same)));
+					    rb_first(&kctx->reg_zone[SAME_VA_ZONE].reg_rbtree));
 	kbase_gpu_gwt_setup_page_permission(kctx, flag,
-				rb_first(&(kctx->reg_rbtree_custom)));
+					    rb_first(&kctx->reg_zone[CUSTOM_VA_ZONE].reg_rbtree));
 }
 
 
 int kbase_gpu_gwt_start(struct kbase_context *kctx)
 {
-	kbase_gpu_vm_lock(kctx);
+	kbase_gpu_vm_lock_with_pmode_sync(kctx);
 	if (kctx->gwt_enabled) {
-		kbase_gpu_vm_unlock(kctx);
+		kbase_gpu_vm_unlock_with_pmode_sync(kctx);
 		return -EBUSY;
 	}
 
@@ -90,7 +90,7 @@ int kbase_gpu_gwt_start(struct kbase_context *kctx)
 
 	kbase_gpu_gwt_setup_pages(kctx, ~KBASE_REG_GPU_WR);
 
-	kbase_gpu_vm_unlock(kctx);
+	kbase_gpu_vm_unlock_with_pmode_sync(kctx);
 	return 0;
 }
 

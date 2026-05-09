@@ -25,6 +25,7 @@
 #include "mali_kbase_csf_trace_buffer.h"
 #include "mali_kbase_csf_timeout.h"
 #include "mali_kbase_mem.h"
+#include "mali_kbase_reg_track.h"
 #include "mali_kbase_mem_pool_group.h"
 #include "mali_kbase_reset_gpu.h"
 #include "mali_kbase_ctx_sched.h"
@@ -196,7 +197,7 @@ struct firmware_timeline_metadata {
 /* The shared interface area, used for communicating with firmware, is managed
  * like a virtual memory zone. Reserve the virtual space from that zone
  * corresponding to shared interface entry parsed from the firmware image.
- * The shared_reg_rbtree should have been initialized before calling this
+ * The MCU_SHARED_ZONE should have been initialized before calling this
  * function.
  */
 static int setup_shared_iface_static_region(struct kbase_device *kbdev)
@@ -209,8 +210,7 @@ static int setup_shared_iface_static_region(struct kbase_device *kbdev)
 	if (!interface)
 		return -EINVAL;
 
-	reg = kbase_alloc_free_region(&kbdev->csf.shared_reg_rbtree, 0,
-			interface->num_pages_aligned, KBASE_REG_ZONE_MCU_SHARED);
+	reg = kbase_alloc_free_region(&kbdev->csf.mcu_shared_zone, 0, interface->num_pages_aligned);
 	if (reg) {
 		mutex_lock(&kbdev->csf.reg_lock);
 		ret = kbase_add_va_region_rbtree(kbdev, reg,
@@ -2140,6 +2140,7 @@ int kbase_csf_firmware_early_init(struct kbase_device *kbdev)
 		  kbase_csf_firmware_reload_worker);
 	INIT_WORK(&kbdev->csf.fw_error_work, firmware_error_worker);
 
+	init_rwsem(&kbdev->csf.pmode_sync_sem);
 	mutex_init(&kbdev->csf.reg_lock);
 
 	kbdev->csf.fw = (struct kbase_csf_mcu_fw){ .data = NULL };
@@ -2564,8 +2565,6 @@ void kbase_csf_wait_protected_mode_enter(struct kbase_device *kbdev)
 {
 	int err;
 
-	lockdep_assert_held(&kbdev->mmu_hw_mutex);
-
 	err = wait_for_global_request(kbdev, GLB_REQ_PROTM_ENTER_MASK);
 
 	if (!err) {
@@ -2839,8 +2838,7 @@ int kbase_csf_firmware_mcu_shared_mapping_init(
 	if (!cpu_addr)
 		goto vmap_error;
 
-	va_reg = kbase_alloc_free_region(&kbdev->csf.shared_reg_rbtree, 0,
-			num_pages, KBASE_REG_ZONE_MCU_SHARED);
+	va_reg = kbase_alloc_free_region(&kbdev->csf.mcu_shared_zone, 0, num_pages);
 	if (!va_reg)
 		goto va_region_alloc_error;
 
