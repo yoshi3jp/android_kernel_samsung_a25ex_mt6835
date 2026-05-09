@@ -1,0 +1,150 @@
+name: DroidSpaces · One UI 8
+run-name: DroidSpaces · ${{ inputs.device_name }} · ${{ inputs.firmware_version }} · ${{ inputs.kernel_version || 'dev' }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      device_name:
+        description: "Device name/model for release metadata (e.g. SM-A253Z, SCG33)"
+        required: true
+        default: "SM-A253Z"
+      firmware_version:
+        description: "Firmware version / Git tag/ref to build (e.g. A253ZSCU1BZB5, SCG33KDS1BZC2)"
+        required: true
+        default: "A253ZSCU1BZB5"
+      kernel_version:
+        description: "Kernel localversion suffix (e.g. 1.0.0)"
+        required: false
+        default: "dev"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build DroidSpaces — ${{ inputs.device_name }} — ${{ inputs.firmware_version }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source from master
+        uses: actions/checkout@v4
+        with:
+          ref: master
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Checkout requested firmware ref
+        run: |
+          set -euo pipefail
+          git fetch --tags --force
+          git checkout --detach "${FIRMWARE_VERSION}"
+          git submodule sync --recursive
+          git submodule update --init --recursive
+          git log --oneline --decorate -n 3
+        env:
+          FIRMWARE_VERSION: ${{ inputs.firmware_version }}
+
+      - name: Normalize build metadata
+        run: |
+          set -euo pipefail
+
+          DEVICE_SLUG="$(printf '%s' "${DEVICE_NAME}" | tr '[:lower:]' '[:upper:]' | sed -E 's/[^A-Z0-9._-]+/-/g; s/^-+|-+$//g')"
+          FIRMWARE_SLUG="$(printf '%s' "${FIRMWARE_VERSION}" | tr '[:lower:]' '[:upper:]' | sed -E 's/[^A-Z0-9._-]+/-/g; s/^-+|-+$//g')"
+
+          if [[ -z "${DEVICE_SLUG}" ]]; then
+            echo "::error::device_name produced an empty safe filename slug"
+            exit 1
+          fi
+
+          if [[ -z "${FIRMWARE_SLUG}" ]]; then
+            echo "::error::firmware_version produced an empty safe filename slug"
+            exit 1
+          fi
+
+          ARTIFACT_BASE="DroidSpaces-${DEVICE_SLUG}-OneUI8-${FIRMWARE_SLUG}"
+
+          {
+            echo "DEVICE_NAME=${DEVICE_NAME}"
+            echo "FIRMWARE_VERSION=${FIRMWARE_VERSION}"
+            echo "KERNEL_VERSION=${KERNEL_VERSION}"
+            echo "DEVICE_SLUG=${DEVICE_SLUG}"
+            echo "FIRMWARE_SLUG=${FIRMWARE_SLUG}"
+            echo "ARTIFACT_BASE=${ARTIFACT_BASE}"
+          } >> "$GITHUB_ENV"
+
+          echo "Device: ${DEVICE_NAME}"
+          echo "Firmware: ${FIRMWARE_VERSION}"
+          echo "Artifact base: ${ARTIFACT_BASE}"
+        env:
+          DEVICE_NAME: ${{ inputs.device_name }}
+          FIRMWARE_VERSION: ${{ inputs.firmware_version }}
+          KERNEL_VERSION: ${{ inputs.kernel_version || 'dev' }}
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y \
+            rsync curl bc bison flex libssl-dev libelf-dev \
+            gcc-aarch64-linux-gnu gcc-arm-linux-gnueabi \
+            binutils-aarch64-linux-gnu binutils-arm-linux-gnueabi \
+            python3 python3-pip zip tar
+
+      - name: Generate release tag
+        id: tag
+        run: |
+          TAG="${FIRMWARE_SLUG}-r$(date -u +'%Y%m%d')-$(openssl rand -hex 4)"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "Tag: ${TAG}"
+
+      - name: Build kernel
+        env:
+          BUILD_KERNEL_VERSION: ${{ inputs.kernel_version || 'dev' }}
+        run: |
+          chmod +x build.sh
+          ./build.sh
+
+      - name: Verify boot.img
+        run: |
+          [[ -f dist/boot.img ]] || { echo "::error::boot.img missing — build failed."; exit 1; }
+          echo "boot.img size: $(du -sh dist/boot.img | cut -f1)"
+
+      - name: Package boot.img (tar → zip)
+        run: |
+          NAME="${ARTIFACT_BASE}-${{ steps.tag.outputs.tag }}"
+          tar -cvf "${NAME}.tar" -C dist boot.img
+          zip "${NAME}.tar.zip" "${NAME}.tar"
+          echo "ARCHIVE=${NAME}.tar.zip" >> "$GITHUB_ENV"
+          echo "ARCHIVE_NAME=${NAME}"    >> "$GITHUB_ENV"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ARCHIVE_NAME }}
+          path: ${{ env.ARCHIVE }}
+          retention-days: 30
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: "DroidSpaces · ${{ env.DEVICE_NAME }} · One UI 8 · ${{ env.FIRMWARE_VERSION }} [${{ steps.tag.outputs.tag }}]"
+          body: |
+            ## DroidSpaces Kernel — ${{ env.DEVICE_NAME }}
+
+            | Field     | Value                         |
+            |-----------|-------------------------------|
+            | Device    | ${{ env.DEVICE_NAME }}        |
+            | Firmware  | ${{ env.FIRMWARE_VERSION }}   |
+            | One UI    | 8 (Android 16)                |
+            | Kernel    | 5.15                          |
+            | Build tag | `${{ steps.tag.outputs.tag }}` |
+            | Version   | `${{ env.KERNEL_VERSION }}`   |
+
+            Flash `boot.img` (extracted from the archive) via `fastboot` or a custom recovery.
+
+            > ⚠️ Automated build — flash at your own risk.
+          files: ${{ env.ARCHIVE }}
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
