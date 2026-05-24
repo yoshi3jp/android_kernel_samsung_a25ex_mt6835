@@ -152,8 +152,8 @@ int kbase_context_common_init(struct kbase_context *kctx)
 	kctx->task = NULL;
 	atomic_set(&kctx->nonmapped_pages, 0);
 	atomic_set(&kctx->permanent_mapped_pages, 0);
-	kctx->tgid = current->tgid;
-	kctx->pid = current->pid;
+	kctx->tgid = task_pid_nr(current->group_leader);
+	kctx->pid = task_pid_nr(current); //this might also have to be group_leader, not current
 
 	/* Check if this is a Userspace created context */
 	if (likely(kctx->kfile)) {
